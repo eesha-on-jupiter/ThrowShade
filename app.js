@@ -79,6 +79,10 @@
   window.TS_SEED_USERS.forEach(s => {
     const u = state.users.find(x => x.id === s.id);
     if (u && !u.photo && s.photo) u.photo = s.photo;
+    if (!u && !state.users.some(x => x.handle === s.handle)) {  // skip if someone already signed up with that handle
+      state.users.forEach(o => { state.follows.push([s.id, o.id]); state.follows.push([o.id, s.id]); });
+      state.users.push({ ...s });
+    }
   });
 
   function seed() {
@@ -413,7 +417,7 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
-  let findQ = '';
+  let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
   let draft = null;
@@ -492,7 +496,7 @@
     const fids = followingIds(state.me);
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
-      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find">${icon('users', 'sm')}Find people</button>`;
+      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-act="findpeople">${icon('users', 'sm')}Find people</button>`;
     return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
@@ -521,21 +525,26 @@
         <button class="btn-sq thin" style="width:34px;height:34px" data-go="#/log/${x.b.id}" aria-label="Rate ${esc(x.b.name)}">${icon('plus', 'sm')}</button>
       </div>`;
     const pinLink = `<button class="btn dashed" style="height:48px;width:100%;margin-top:12px" data-act="pinfrommap">${icon('pin', 'sm')}Can’t find it? Drop a pin</button>`;
-    const others = state.users.filter(u => u.id !== state.me);
-    if (!q) {
-      return section('People', others.slice(0, 4).map(personRow)) +
-        section(`Architecture nearby · ${locNote()}`, nearest(BUILDINGS).slice(0, 15).map(placeRow)) + pinLink;
+    if (findTab === 'users') {
+      const others = state.users.filter(u => u.id !== state.me).sort((a, b) => a.name.localeCompare(b.name));
+      const people = q ? others.filter(u => u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)) : others;
+      if (!people.length) return `<div class="empty" style="margin-top:12px">No users match “${esc(findQ)}”.</div>`;
+      return section(q ? 'Users' : `All users · ${people.length}`, people.map(personRow));
     }
-    const people = others.filter(u => u.handle.includes(q) || u.name.toLowerCase().includes(q));
+    if (!q) return section(`Nearby · ${locNote()}`, nearest(BUILDINGS).slice(0, 15).map(placeRow)) + pinLink;
     const places = nearest(BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q))).slice(0, 40);
-    if (!people.length && !places.length) return `<div class="empty" style="margin-top:12px">Nothing matches “${esc(findQ)}”.</div>` + pinLink;
-    return section('People', people.slice(0, 5).map(personRow)) + section('Architecture', places.map(placeRow)) + pinLink;
+    if (!places.length) return `<div class="empty" style="margin-top:12px">No architecture matches “${esc(findQ)}”.</div>` + pinLink;
+    return section('Architecture', places.map(placeRow)) + pinLink;
   }
 
   function viewFind() {
     return `<div class="screen with-nav">
       <div class="topbar"><div class="h1">Search</div></div>
-      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Architecture, architects, cities or people" autocomplete="off" autocapitalize="none"></div>
+      <div class="tabs" style="margin:0 20px 12px">
+        <button class="${findTab === 'arch' ? 'on' : ''}" data-act="findtab" data-k="arch">Architecture</button>
+        <button class="${findTab === 'users' ? 'on' : ''}" data-act="findtab" data-k="users">Users</button>
+      </div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="${findTab === 'users' ? 'Search users by name or handle' : 'Search buildings, bridges, art, architects, cities'}" autocomplete="off" autocapitalize="none"></div>
       <div id="results" class="stack-6 pad">${findResults()}</div>
       <div class="spacer"></div>
     </div>${nav('find')}`;
@@ -1807,6 +1816,8 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    findtab(d) { findTab = d.k; findQ = ''; render(); },
+    findpeople() { findTab = 'users'; findQ = ''; go('#/find'); },
     viewphoto(d) { const list = galleries[+d.g]; if (list) openViewer(list, +d.i); },
     lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
     lbprev() { stepViewer(-1); },
