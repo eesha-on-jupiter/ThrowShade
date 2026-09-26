@@ -61,6 +61,11 @@
     });
     state.seedPhotos = 3;
   }
+  // Older saves predate the seeded critics' avatars.
+  window.TS_SEED_USERS.forEach(s => {
+    const u = state.users.find(x => x.id === s.id);
+    if (u && !u.photo && s.photo) u.photo = s.photo;
+  });
 
   function seed() {
     const now = Date.now();
