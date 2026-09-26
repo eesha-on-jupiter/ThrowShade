@@ -27,7 +27,7 @@
   const SEED_PHOTOS = window.TS_SEED_PHOTOS || {};
   const PHOTO_CREDITS = {};
   Object.values(SEED_PHOTOS).forEach(list => list.forEach(x => { PHOTO_CREDITS[x.url] = x.credit; }));
-  const SEED_PHOTO_COUNTS = [2, 1, 3, 1, 0, 2, 1, 4, 1, 2];
+  const SEED_PHOTO_COUNTS = [0, 2, 0, 1, 0, 0, 3, 0, 1, 0];
   function seedPhotosFor(userId, bid, i) {
     const pool = SEED_PHOTOS[bid] || [];
     if (!pool.length) return [];
@@ -54,12 +54,12 @@
     if (!v.likes) v.likes = [];
   });
   // (Re)apply stand-in photos to seeded posts; photos people uploaded (data: URLs) are never touched.
-  if (state.seedPhotos !== 2) {
+  if (state.seedPhotos !== 3) {
     state.visits.forEach(v => {
       const m = /^v(\d+)$/.exec(v.id);
       if (m && v.photos.every(p => !p.startsWith('data:'))) v.photos = seedPhotosFor(v.userId, v.buildingId, +m[1]);
     });
-    state.seedPhotos = 2;
+    state.seedPhotos = 3;
   }
 
   function seed() {
@@ -288,14 +288,17 @@
     return likes && likes.length ? `<div class="chips likes">${likes.map(l => `<span class="chip">${esc(l)}</span>`).join('')}</div>` : '';
   }
   // A log's own photos: 1 full width, 2 side by side, 3 = one large + two, 4 = grid.
+  let galleries = [];
+  function gallery(list) { galleries.push(list); return galleries.length - 1; }
   function shotsHTML(photos) {
     if (!photos || !photos.length) return '';
     const list = photos.slice(0, MAX_PHOTOS);
+    const g = gallery(list);
     const credits = list.map(p => PHOTO_CREDITS[p]).filter(Boolean);
     const creditLine = credits.length
       ? `<div class="shot-credit">Photo${credits.length > 1 ? 's' : ''}: ${esc([...new Set(credits.map(c => c.artist))].join(', '))} · <a href="${esc(credits[0].page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
       : '';
-    return `<div class="shots n${list.length}">${list.map(p => `<div class="shot" style="background-image:url('${p}')"></div>`).join('')}</div>${creditLine}`;
+    return `<div class="shots n${list.length}">${list.map((p, i) => `<button class="shot" data-act="viewphoto" data-g="${g}" data-i="${i}" style="background-image:url('${p}')" aria-label="View photo ${i + 1} of ${list.length}"></button>`).join('')}</div>${creditLine}`;
   }
   const phLabel = b => [b.style, b.year].filter(Boolean).join(' · ').toUpperCase();
   const byLine = b => [b.architect, b.year].filter(Boolean).join(' · ');
@@ -709,7 +712,7 @@
     let tabBody;
     if (bTab === 'photos') {
       tabBody = photos.length
-        ? `<div class="photo-grid">${photos.map(p => `<div class="ph photo" style="background-image:url('${p}');background-size:cover;background-position:center"></div>`).join('')}</div>`
+        ? `<div class="photo-grid">${(g => photos.map((p, i) => `<button class="ph photo" data-act="viewphoto" data-g="${g}" data-i="${i}" style="background-image:url('${p}');background-size:cover;background-position:center" aria-label="View photo ${i + 1}"></button>`).join(''))(gallery(photos))}</div>`
         : `<div class="empty">No photos yet. Log a visit to add the first.</div>`;
     } else {
       tabBody = vs.length ? vs.map(v => {
@@ -1444,6 +1447,53 @@
     reader.readAsDataURL(file);
   }
 
+  // ---------- Photo viewer ----------
+  let viewer = null;
+  function openViewer(list, i) {
+    closeViewer();
+    viewer = { list, i };
+    const el = document.createElement('div');
+    el.className = 'lightbox';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Photo viewer');
+    root.appendChild(el);
+    let x0 = null;
+    el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40) stepViewer(dx < 0 ? 1 : -1);
+    });
+    drawViewer();
+  }
+  function drawViewer() {
+    const el = root.querySelector('.lightbox');
+    if (!el || !viewer) return;
+    const { list, i } = viewer, url = list[i], c = PHOTO_CREDITS[url];
+    el.innerHTML = `
+      <div class="lb-top"><span class="lb-count">${list.length > 1 ? `${i + 1} / ${list.length}` : ''}</span>
+        <button class="btn-sq lb-close" data-act="lbclose" aria-label="Close">${icon('x')}</button></div>
+      <div class="lb-stage" data-act="lbclose"><img src="${url}" alt="Photo ${i + 1} of ${list.length}"></div>
+      ${list.length > 1 ? `<button class="btn-sq lb-nav prev" data-act="lbprev" aria-label="Previous photo">${icon('back')}</button>
+        <button class="btn-sq lb-nav next" data-act="lbnext" aria-label="Next photo">${icon('chevron')}</button>` : ''}
+      ${c ? `<div class="lb-credit">Photo: ${esc(c.artist)}${c.license ? ' · ' + esc(c.license) : ''} · <a href="${esc(c.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>` : ''}`;
+  }
+  function stepViewer(d) {
+    if (!viewer) return;
+    viewer.i = (viewer.i + d + viewer.list.length) % viewer.list.length;
+    drawViewer();
+  }
+  function closeViewer() {
+    const el = root.querySelector('.lightbox'); if (el) el.remove();
+    viewer = null;
+  }
+  document.addEventListener('keydown', e => {
+    if (!viewer) return;
+    if (e.key === 'Escape') closeViewer();
+    if (e.key === 'ArrowRight') stepViewer(1);
+    if (e.key === 'ArrowLeft') stepViewer(-1);
+  });
+
   // ---------- Confetti ----------
   function celebrate() {
     const old = root.querySelector('.confetti'); if (old) old.remove();
@@ -1501,6 +1551,7 @@
     if (seg[0] !== 'save' && seg[0] !== 'newlist') inviteSel = new Set();
 
     destroyMap();
+    galleries = [];
     let html, after;
     switch (seg[0]) {
       case 'signin': html = viewSignin(); break;
@@ -1647,6 +1698,10 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    viewphoto(d) { const list = galleries[+d.g]; if (list) openViewer(list, +d.i); },
+    lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
+    lbprev() { stepViewer(-1); },
+    lbnext() { stepViewer(1); },
     closeedit() { epPhoto = undefined; back(); },
     // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
     pickavatar(d, el) {
