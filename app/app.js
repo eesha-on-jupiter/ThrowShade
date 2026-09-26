@@ -178,6 +178,7 @@
   let bTab = 'critiques';
   let draft = null;
   let resetArmed = false;
+  let delArmed = false;
   const trail = [];
 
   // ---------- Views ----------
@@ -389,6 +390,7 @@
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
+        ${visitTimingHTML(b)}
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -539,7 +541,10 @@
        <div class="field"><label for="critique">Quick critique</label>
          <textarea id="critique" class="input" maxlength="280" data-input="note" placeholder="Say something sharp…">${esc(draft.note)}</textarea>
          <div class="counter" id="note-count">${draft.note.length} / 280</div></div>
-       <div class="sheet-foot"><button class="btn-primary" data-act="post">${editing ? 'Update critique' : 'Post critique'}</button></div>`);
+       <div class="sheet-foot stack-6">
+         <button class="btn-primary" data-act="post">${editing ? 'Update critique' : 'Post critique'}</button>
+         ${editing ? `<button class="btn block ${delArmed ? 'on' : ''}" data-act="delvisit" data-id="${bid}">${delArmed ? 'Tap again to delete' : 'Delete critique'}</button>` : ''}
+       </div>`);
   }
 
   function viewNotFound() {
@@ -645,6 +650,108 @@
       .finally(() => clearTimeout(timer));
   }
   const qs = o => Object.entries(o).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+
+  // ---------- Weather / best time to visit ----------
+  // Open-Meteo needs no API key, so the demo works with live weather straight away.
+  const WMO = {
+    0: '☀', 1: '🌤', 2: '⛅', 3: '☁',
+    45: '🌫', 48: '🌫',
+    51: '🌦', 53: '🌦', 55: '🌦', 56: '🌦', 57: '🌦',
+    61: '🌧', 63: '🌧', 65: '🌧', 66: '🌧', 67: '🌧',
+    71: '🌨', 73: '🌨', 75: '🌨', 77: '🌨',
+    80: '🌦', 81: '🌧', 82: '🌧',
+    85: '🌨', 86: '🌨',
+    95: '⛈', 96: '⛈', 99: '⛈',
+  };
+  const wmoLabel = c => c === 0 ? 'Clear' : c <= 2 ? 'Mostly clear' : c === 3 ? 'Cloudy' : c <= 48 ? 'Foggy' : c <= 67 || (c >= 80 && c <= 82) ? 'Rainy' : c <= 77 || c >= 85 ? 'Snowy' : c >= 95 ? 'Stormy' : 'Mixed';
+  const weatherCache = {};
+
+  function weatherKey(lat, lng) { return lat.toFixed(2) + ',' + lng.toFixed(2); }
+
+  function sunTimesFor(b) {
+    if (typeof SunCalc === 'undefined') return null;
+    const now = new Date();
+    const times = SunCalc.getTimes(now, b.lat, b.lng);
+    return { now, sunrise: times.sunrise, sunset: times.sunset, goldenHour: times.goldenHour, goldenHourEnd: times.goldenHourEnd };
+  }
+
+  async function loadWeather(b) {
+    const key = weatherKey(b.lat, b.lng);
+    if (weatherCache[key]) return;
+    weatherCache[key] = { loading: true };
+    try {
+      const d = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + qs({
+        latitude: b.lat, longitude: b.lng, current: 'temperature_2m,weather_code',
+        daily: 'weather_code,temperature_2m_max,sunset', temperature_unit: 'fahrenheit', timezone: 'auto', forecast_days: 5,
+      }), null, 8000);
+      weatherCache[key] = { loading: false, current: d.current, daily: d.daily };
+    } catch (e) {
+      weatherCache[key] = { loading: false, error: true };
+    }
+    if (currentPath() === '/b/' + b.id) render();
+  }
+
+  function visitTimingHTML(b) {
+    const sun = sunTimesFor(b);
+    if (!sun) return '';
+    const key = weatherKey(b.lat, b.lng);
+    const w = weatherCache[key];
+    if (!w) { loadWeather(b); }
+    const dayStart = sun.sunrise.getTime(), dayEnd = sun.sunset.getTime();
+    const pct = t => Math.max(0, Math.min(100, (t - dayStart) / (dayEnd - dayStart) * 100));
+    const nowPct = pct(sun.now.getTime());
+    const goldenPct = pct(sun.goldenHour.getTime());
+    const fmtTime = t => t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    const msToGolden = sun.goldenHour.getTime() - sun.now.getTime();
+    const inGolden = sun.now >= sun.goldenHour && sun.now <= sun.sunset;
+    let noteHTML;
+    if (inGolden) {
+      noteHTML = `<b>Golden hour now</b> — the light won't be this good again till tomorrow.`;
+    } else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
+      const h = Math.floor(msToGolden / 3600000), m = Math.round((msToGolden % 3600000) / 60000);
+      noteHTML = `<b>Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m</b>` + (w && w.current ? ` — ${wmoLabel(w.current.weather_code).toLowerCase()} skies.` : '.');
+    } else if (sun.now > sun.sunset || sun.now < sun.sunrise) {
+      noteHTML = `Sun's down. Golden hour tomorrow around ${fmtTime(sun.goldenHour)}.`;
+    } else {
+      noteHTML = `Golden hour today at ${fmtTime(sun.goldenHour)}.`;
+    }
+
+    const statusHTML = w && w.current
+      ? `<span class="visit-icon">${WMO[w.current.weather_code] || '☀'}</span>${wmoLabel(w.current.weather_code)}, ${Math.round(w.current.temperature_2m)}°F`
+      : w && w.error ? `<span class="visit-icon">—</span>Weather unavailable` : `<span class="visit-icon">…</span>Loading…`;
+
+    let forecastHTML = '';
+    if (w && w.daily) {
+      const codes = w.daily.weather_code, highs = w.daily.temperature_2m_max, sunsets = w.daily.sunset, dates = w.daily.time;
+      const bestIdx = codes.reduce((best, c, i) => (i > 0 && c <= 2 && (best < 0 || c < codes[best])) ? i : best, -1);
+      forecastHTML = `<div class="forecast-row">${dates.map((d, i) => {
+        const day = i === 0 ? 'Today' : new Date(d + 'T12:00').toLocaleDateString([], { weekday: 'short' });
+        const sset = new Date(sunsets[i]);
+        return `<div class="forecast-day${i === bestIdx ? ' best' : ''}">
+          <div class="d">${day}</div>
+          <div class="icon">${WMO[codes[i]] || '☀'}</div>
+          <div class="t">${Math.round(highs[i])}°</div>
+          <div class="g">${fmtTime(sset)}</div>
+          ${i === bestIdx ? '<div class="badge-best">BEST</div>' : ''}
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    return `<div class="visit-card">
+      <div class="visit-top">
+        <div class="visit-status">${statusHTML}</div>
+      </div>
+      <div class="visit-bar">
+        <div class="visit-bar-fill" style="width:${nowPct}%"></div>
+        <div class="visit-bar-marker" style="left:${nowPct}%" data-label="NOW"></div>
+        <div class="visit-bar-marker golden" style="left:${goldenPct}%" data-label="GOLDEN"></div>
+      </div>
+      <div class="visit-times"><span>${fmtTime(sun.sunrise)}</span><span>${fmtTime(sun.sunset)}</span></div>
+      <div class="visit-note"><span class="dot-live"></span><span>${noteHTML}</span></div>
+      ${forecastHTML}
+    </div>`;
+  }
 
   async function overpass(lat, lng) {
     const q = `[out:json][timeout:10];(way(around:25,${lat},${lng})[building];relation(around:25,${lat},${lng})[building];` +
@@ -921,7 +1028,7 @@
     if (trail[trail.length - 1] !== path) trail.push(path);
     if (trail.length > 50) trail.splice(0, trail.length - 50);
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
-    if (seg[0] !== 'log') draft = null;
+    if (seg[0] !== 'log') { draft = null; delArmed = false; }
 
     destroyMap();
     let html, after;
@@ -1066,6 +1173,16 @@
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
     rmphoto() { draft.photo = null; render(); },
+    delvisit(d) {
+      if (!delArmed) { delArmed = true; render(); return; }
+      delArmed = false;
+      state.visits = state.visits.filter(v => !(v.userId === state.me && v.buildingId === d.id));
+      save();
+      draft = null;
+      trail.push('/b/' + d.id);
+      location.replace('#/b/' + d.id);
+      setTimeout(() => toast('Critique deleted'), 30);
+    },
     post() {
       if (!draft || !draft.stars) return toast('Pick a star rating first');
       const b = BY_ID[draft.bid];
