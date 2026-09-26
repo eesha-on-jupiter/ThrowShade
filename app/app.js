@@ -329,7 +329,6 @@
     return `<div class="screen"><div class="signin">
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
       <div class="signin-avatar">
         <button class="avatar-edit" data-act="toggleavatars" aria-label="Choose a profile picture" aria-expanded="false"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></button>
         <div class="avatar-menu" id="su-avatar-menu" hidden>
