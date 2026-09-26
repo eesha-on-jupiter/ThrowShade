@@ -88,6 +88,68 @@
     if (!vs.length) return { avg: null, n: 0 };
     return { avg: vs.reduce((s, v) => s + v.stars, 0) / vs.length, n: vs.length };
   }
+  function topRated(limit) {
+    return BUILDINGS.map(b => ({ b, a: avgFor(b.id) }))
+      .filter(x => x.a.n > 0)
+      .sort((x, y) => y.a.avg - x.a.avg || y.a.n - x.a.n)
+      .slice(0, limit || 10);
+  }
+  // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
+  function recsFor(uid, limit) {
+    const visited = new Set(visitsBy(uid).map(v => v.buildingId));
+    const fids = followingIds(uid);
+    const styleTotals = {};
+    visitsBy(uid).forEach(v => {
+      const b = BY_ID[v.buildingId]; if (!b || !b.style) return;
+      (styleTotals[b.style] = styleTotals[b.style] || []).push(v.stars);
+    });
+    const favStyles = new Set(Object.entries(styleTotals)
+      .filter(([, arr]) => arr.reduce((s, n) => s + n, 0) / arr.length >= 4)
+      .map(([s]) => s));
+    const distMap = new Map(nearest(BUILDINGS).map(x => [x.b.id, x.d]));
+    const scored = BUILDINGS.filter(b => !visited.has(b.id)).map(b => {
+      const friendVs = visitsFor(b.id).filter(v => fids.has(v.userId));
+      const friendAvg = friendVs.length ? friendVs.reduce((s, v) => s + v.stars, 0) / friendVs.length : 0;
+      const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
+      let score = 0, reason = null;
+      if (friendAvg >= 4) { score += friendAvg * 3; reason = friendVs.length > 1 ? `${friendVs.length} friends loved it` : 'A friend loved it'; }
+      if (!reason && favStyles.has(b.style)) { score += 4; reason = `You tend to love ${b.style}`; }
+      if (!reason && d < 3) { score += 2; reason = 'Right nearby'; }
+      score += Math.max(0, 2 - d / 15);
+      return { b, score, reason, d };
+    }).filter(x => x.reason);
+    scored.sort((x, y) => y.score - x.score);
+    if (scored.length < (limit || 12)) {
+      const already = new Set(scored.map(x => x.b.id));
+      topRated(40).forEach(x => {
+        if (scored.length >= (limit || 12)) return;
+        if (visited.has(x.b.id) || already.has(x.b.id)) return;
+        scored.push({ b: x.b, score: 0, reason: 'Highly rated', d: distMap.get(x.b.id) });
+        already.add(x.b.id);
+      });
+    }
+    return scored.slice(0, limit || 12);
+  }
+  // Guides: shelves grouped by style, kind and city — built from whatever data already exists.
+  function buildGuides() {
+    const guides = [];
+    const byStyle = {};
+    BUILDINGS.forEach(b => { if (b.style) (byStyle[b.style] = byStyle[b.style] || []).push(b); });
+    Object.entries(byStyle).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 4)
+      .forEach(([style, list]) => guides.push({ title: style, sub: `${list.length} places`, items: rankByRating(list) }));
+    ['bridge', 'art', 'spot'].forEach(k => {
+      const list = BUILDINGS.filter(b => kindOf(b) === k);
+      if (list.length) guides.push({ title: KINDS[k] + 's', sub: `${list.length} places`, items: rankByRating(list) });
+    });
+    const byCity = {};
+    BUILDINGS.forEach(b => { if (b.city) (byCity[b.city] = byCity[b.city] || []).push(b); });
+    const topCity = Object.entries(byCity).sort((a, b) => b[1].length - a[1].length)[0];
+    if (topCity && topCity[1].length >= 3) guides.push({ title: topCity[0], sub: `${topCity[1].length} places`, items: rankByRating(topCity[1]) });
+    return guides;
+  }
+  function rankByRating(list) {
+    return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
   function photoFor(bid) {
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
     return vs.length ? vs[0].photos[0] : null;
@@ -373,7 +435,30 @@
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
       `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
-    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+    const top = topRated(10);
+    const rail = top.length ? `<div class="pad"><div class="section-title">Top rated<button class="link" data-go="#/top">See all${icon('chevron', 'sm')}</button></div></div>
+      <div class="rail">${top.map((x, i) => `<button class="rail-item" data-go="#/b/${x.b.id}">
+        ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false, inner: `<span class="rail-rank">${i + 1}</span>` })}
+        <div class="rail-name ellipsis">${esc(x.b.name)}</div>
+        <div class="rail-meta">${scoreHTML(x.a.avg.toFixed(1))}<span class="muted">· ${x.a.n}</span></div>
+      </button>`).join('')}</div>
+      <div class="pad" style="padding-top:24px"><div class="section-title">Latest</div></div>` : '';
+    return `<div class="screen with-nav">${head}${rail}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+  }
+
+  function viewTopRated() {
+    const list = topRated(50);
+    const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
+        ${scoreHTML(x.a.avg.toFixed(1))}
+      </button>`).join('') : `<div class="empty">Nothing rated yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Top rated</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function buildingRow(b, right) {
@@ -439,12 +524,33 @@
     return first ? ph(first, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`;
   }
 
-  function viewLists() {
-    const want = state.want.filter(w => w.userId === state.me).length;
-    const lists = myLists();
-    return `<div class="screen with-nav">
-      <div class="topbar"><div class="h1">Lists</div><button class="btn-sq thin" data-go="#/newlist" aria-label="New list">${icon('plus')}</button></div>
-      <div class="stack-6 pad">
+  // Tabs: your lists, Recs and Guides (Recs/Guides from Herft's shandon-updates).
+  function viewLists(tab) {
+    const tabs = `<div class="tabs" style="margin:0 20px 12px">
+      <button class="${tab === 'mine' ? 'on' : ''}" data-go="#/lists">My lists</button>
+      <button class="${tab === 'recs' ? 'on' : ''}" data-go="#/lists/recs">Recs</button>
+      <button class="${tab === 'guides' ? 'on' : ''}" data-go="#/lists/guides">Guides</button></div>`;
+    let body;
+    if (tab === 'recs') {
+      const recs = recsFor(state.me, 12);
+      body = `<div class="stack-6 pad">${recs.length ? recs.map(x => `<div class="row" data-go="#/b/${x.b.id}">
+          ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+          <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
+          <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
+        </div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
+    } else if (tab === 'guides') {
+      const guides = buildGuides();
+      body = `<div class="pad">${guides.length ? guides.map(g => `
+        <div class="section-title" style="margin-top:8px">${esc(g.title)}<span class="muted small">${esc(g.sub)}</span></div>
+        <div class="rail flush">${g.items.slice(0, 10).map(b => `<button class="rail-item" data-go="#/b/${b.id}">
+          ${ph(b, { w: 300, cls: 'rail-photo', label: phLabel(b), go: false })}
+          <div class="rail-name ellipsis">${esc(b.name)}</div>
+          <div class="rail-meta muted">${esc(b.city || '')}</div>
+        </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
+    } else {
+      const want = state.want.filter(w => w.userId === state.me).length;
+      const lists = myLists();
+      body = `<div class="stack-6 pad">
         <button class="row" data-go="#/list/want">
           <div class="list-icon">${icon('bookmark')}</div>
           <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
@@ -456,7 +562,11 @@
           <div class="avatars">${l.members.slice(0, 3).map(m => user(m)).filter(Boolean).map(u => avatar(u, 'xs').replace('data-go', 'data-x')).join('')}</div>
         </button>`).join('')}
       </div>
-      <div class="pad" style="margin-top:14px"><button class="btn dashed" style="width:100%;height:52px" data-go="#/newlist">${icon('plus', 'sm')}New list</button></div>
+      <div class="pad" style="margin-top:14px"><button class="btn dashed" style="width:100%;height:52px" data-go="#/newlist">${icon('plus', 'sm')}New list</button></div>`;
+    }
+    return `<div class="screen with-nav">
+      <div class="topbar"><div class="h1">Lists</div><button class="btn-sq thin" data-go="#/newlist" aria-label="New list">${icon('plus')}</button></div>
+      ${tabs}${body}
       <div class="spacer"></div>
     </div>${nav('lists')}`;
   }
@@ -613,7 +723,6 @@
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
-        ${visitTimingHTML(b)}
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -634,6 +743,7 @@
           <div class="small muted">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}${adder ? ` · pinned by @${esc(adder.handle)}` : ''}</div>
           <div class="chips">${links}</div>
         </div>
+        ${visitTimingHTML(b)}
         <div class="tabs">
           <button class="${bTab === 'critiques' ? 'on' : ''}" data-act="btab" data-k="critiques">Critiques · ${vs.length}</button>
           <button class="${bTab === 'photos' ? 'on' : ''}" data-act="btab" data-k="photos">Photos · ${photos.length}</button>
@@ -1369,10 +1479,11 @@
       case 'feed': html = viewHome('feed'); break;
       case 'map': html = viewHome('map'); after = initMap; break;
       case 'find': html = viewFind(qs); break;
-      case 'lists': html = viewLists(); break;
+      case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
       case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
       case 'save': html = viewSaveTo(seg[1]); break;
       case 'newlist': html = viewNewList(); break;
+      case 'top': html = viewTopRated(); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
