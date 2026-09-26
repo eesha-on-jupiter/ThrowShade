@@ -179,6 +179,18 @@ window.TS_SEED_LIKES = {
   'u-jonah|att-building': ['Facade', 'Concept', 'Detail'],
 };
 
+// Shared lists. items: [buildingId, addedBy]. invitesNewUsers: new sign-ups are added as members (demo).
+window.TS_SEED_LISTS = [
+  {
+    id: 'l-mies', name: 'Mies pilgrimage', ownerId: 'u-mara', members: ['u-mara', 'u-theo'], invitesNewUsers: true, hoursAgo: 30,
+    items: [['wd-Q753180', 'u-mara'], ['farnsworth', 'u-mara'], ['seagram', 'u-theo'], ['barcelona-pavilion', 'u-mara']],
+  },
+  {
+    id: 'l-bridges', name: 'River bridges walk', ownerId: 'u-priya', members: ['u-priya', 'u-jonah'], hoursAgo: 12,
+    items: [['wd-Q1928112', 'u-priya'], ['wd-Q2002163', 'u-jonah'], ['wd-Q5127391', 'u-priya'], ['wd-Q7026554', 'u-priya']],
+  },
+];
+
 // [userId, buildingId]
 window.TS_SEED_WANT = [
   ['u-mara', 'barbican'], ['u-mara', 'church-of-light'],
