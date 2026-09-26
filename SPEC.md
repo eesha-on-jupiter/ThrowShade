@@ -112,6 +112,8 @@ python tools/fetch_wikidata.py --global 0 --local 400 --radius 20 --city Chicago
 python tools/fetch_wikidata.py --global 450 --local 400 --radius 20 --city Chicago # + worldwide
 ```
 
+**Stand-in photos for seeded posts (`tools/fetch_seed_photos.py`).** For every place a seeded critic posted about, pulls up to 4 photos from the place's Wikimedia Commons category (Wikidata P373) into `app/seed-photos.js`. Seeded posts show 0–4 of them (two critics posting the same place get different shots), each with a photographer/licence credit under the photos. Photos people upload themselves are never replaced.
+
 **Drop a pin (runtime).**
 1. Overpass API: buildings within 25 m of the pin, named buildings within 90 m, plus artworks, bridges, parks, squares, fountains, piers and attractions nearby; each result is tagged building / bridge / art / spot. Two public servers, 12 s timeout each.
 2. Nominatim reverse geocode in parallel: the address and city, and the fallback candidate if Overpass fails.
