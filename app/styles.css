@@ -538,3 +538,5 @@ button.shot { border: 0; padding: 0; cursor: zoom-in; display: block; width: 100
 .lb-nav.next { right: 10px; }
 .lb-credit { font-size: 11px; opacity: .7; padding: 0 20px 22px; text-align: center; }
 .lb-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.find-section { margin: 16px 0 2px; }
+.nav .plus.on { color: var(--paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--ink); }

@@ -29,7 +29,7 @@ The recorded demo shows this flow end to end:
 
 | Topic | Decision |
 | --- | --- |
-| Rating | 1–5 whole stars per log, plus optional "what stood out" chips (Design, Material, Structure, Facade, Light, Space, Interior, Detail, Craft, Context, Landscape, Views, Scale, Concept, Engineering, Atmosphere, Sustainability). No ranking. |
+| Rating | 1–5 whole stars per log, plus optional "what stood out" chips (Design, Material, Structure, Facade, Light, Space, Interior, Detail, Craft, Context, Landscape, Views, Scale, Vibes, Engineering, Sustainability). No ranking. |
 | Feed | Shows exactly what the person posted: stars, their critique, the chips they picked, and their own photos (0–4). No stock images. |
 | Place types | Buildings, bridges, art (sculpture, murals, installations) and spots (parks, squares, fountains, piers). |
 | Profiles | All profiles and logs are public. No private profiles, no follow approval, no private notes. |
@@ -51,9 +51,9 @@ Five bottom tabs, with the mockups' square icons and a black centre "+".
 
 | Tab | Route | Purpose |
 | --- | --- | --- |
-| Home | `#/feed` | Feed, with the wordmark and a search button |
+| Home | `#/feed` | Feed, with the wordmark |
 | Lists | `#/lists` | Want to Visit and your custom (shared) lists |
-| + | `#/log` | Log flow (bottom sheet) |
+| Search (centre) | `#/find` | One search for architecture (places, architects, cities) and people; + on a result rates it |
 | Map | `#/map` | Map of places with type and status filters; drop a pin to add a place |
 | You | `#/me` | Your profile |
 

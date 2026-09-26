@@ -19,7 +19,7 @@
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
   // What a rater liked — toggled as chips in the log sheet, shown on the feed and summed per place.
   const ASPECTS = ['Design', 'Material', 'Structure', 'Facade', 'Light', 'Space', 'Interior', 'Detail', 'Craft',
-    'Context', 'Landscape', 'Views', 'Scale', 'Concept', 'Engineering', 'Atmosphere', 'Sustainability'];
+    'Context', 'Landscape', 'Views', 'Scale', 'Vibes', 'Engineering', 'Sustainability'];
   const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
   const kindOf = b => b.kind || 'building';
   const MAX_PHOTOS = 4;
@@ -51,8 +51,8 @@
   }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
-    Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
-    Deconstructivist: ['Design', 'Concept', 'Facade'], 'Art Deco': ['Facade', 'Detail', 'Craft'], 'High-tech': ['Structure', 'Engineering', 'Design'],
+    Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Vibes'],
+    Deconstructivist: ['Design', 'Vibes', 'Facade'], 'Art Deco': ['Facade', 'Detail', 'Craft'], 'High-tech': ['Structure', 'Engineering', 'Design'],
     Contemporary: ['Design', 'Material', 'Context'], Historic: ['Craft', 'Detail', 'Facade'],
   };
 
@@ -64,6 +64,8 @@
     if (!v.photos) v.photos = v.photo ? [v.photo] : [];
     delete v.photo;
     if (!v.likes) v.likes = [];
+    // "Concept" and "Atmosphere" were folded into "Vibes".
+    v.likes = [...new Set(v.likes.map(l => (l === 'Concept' || l === 'Atmosphere' ? 'Vibes' : l)))];
   });
   // (Re)apply stand-in photos to seeded posts; photos people uploaded (data: URLs) are never touched.
   if (state.seedPhotos !== 3) {
@@ -387,7 +389,7 @@
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home', 'home')}
       ${item('lists', '#/lists', 'Lists', 'bookmark')}
-      <a href="#/log" class="plus" aria-label="Log a building">${icon('plus')}</a>
+      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people">${icon('search')}</a>
       ${item('map', '#/map', 'Map', 'map')}
       ${item('you', '#/me', 'You', 'user')}
     </nav>`;
@@ -411,7 +413,7 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
-  let findTab = 'buildings', findQ = '';
+  let findQ = '';
   let listSort = 'top';
   let bTab = 'critiques';
   let draft = null;
@@ -465,7 +467,7 @@
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}<button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>`;
+      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}</div>`;
     if (tab === 'map') {
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
@@ -490,31 +492,8 @@
     const fids = followingIds(state.me);
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
-      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
-    const top = topRated(10);
-    const rail = top.length ? `<div class="pad"><div class="section-title">Top rated<button class="link" data-go="#/top">See all${icon('chevron', 'sm')}</button></div></div>
-      <div class="rail">${top.map((x, i) => `<button class="rail-item" data-go="#/b/${x.b.id}">
-        ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false, inner: `<span class="rail-rank">${i + 1}</span>` })}
-        <div class="rail-name ellipsis">${esc(x.b.name)}</div>
-        <div class="rail-meta">${scoreHTML(x.a.avg.toFixed(1))}<span class="muted">· ${x.a.n}</span></div>
-      </button>`).join('')}</div>
-      <div class="pad" style="padding-top:24px"><div class="section-title">Latest</div></div>` : '';
-    return `<div class="screen with-nav">${head}${rail}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
-  }
-
-  function viewTopRated() {
-    const list = topRated(50);
-    const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
-        <span class="rank">${i + 1}</span>
-        ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
-        ${scoreHTML(x.a.avg.toFixed(1))}
-      </button>`).join('') : `<div class="empty">Nothing rated yet.</div>`;
-    return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Top rated</div></div>
-      <div class="stack-6 pad">${rows}</div>
-      <div class="spacer"></div>
-    </div>${nav('')}`;
+      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find">${icon('users', 'sm')}Find people</button>`;
+    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
   function buildingRow(b, right) {
@@ -527,39 +506,39 @@
 
   function findResults() {
     const q = findQ.trim().toLowerCase();
-    if (findTab === 'people') {
-      const people = state.users.filter(u => u.id !== state.me && (!q || u.handle.includes(q) || u.name.toLowerCase().includes(q)));
-      if (!people.length) return `<div class="empty">No one matches “${esc(findQ)}”.</div>`;
-      return people.map(u => {
-        const f = isFollowing(state.me, u.id);
-        return `<div class="row" data-go="#/u/${u.id}">
-          ${avatar(u)}<div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)} · ${visitsBy(u.id).length} logged</div></div>
-          <button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${u.id}">${f ? 'Following' : 'Follow'}</button>
-        </div>`;
-      }).join('');
-    }
-    let list;
+    const section = (title, rows) => rows.length ? `<div class="caps find-section">${title}</div>${rows.join('')}` : '';
+    const personRow = u => {
+      const f = isFollowing(state.me, u.id);
+      return `<div class="row" data-go="#/u/${u.id}">
+        ${avatar(u)}<div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)} · ${visitsBy(u.id).length} logged</div></div>
+        <button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${u.id}">${f ? 'Following' : 'Follow'}</button>
+      </div>`;
+    };
+    // Tap the row to open the place; the + rates it straight away (the log flow used to live on the centre button).
+    const placeRow = x => `<div class="row" data-go="#/b/${x.b.id}">
+        ${ph(x.b, { style: 'width:38px;height:38px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc([KINDS[kindOf(x.b)] !== 'Building' && KINDS[kindOf(x.b)], makerLine(x.b), fmtKm(x.d)].filter(Boolean).join(' · '))}</div></div>
+        <button class="btn-sq thin" style="width:34px;height:34px" data-go="#/log/${x.b.id}" aria-label="Rate ${esc(x.b.name)}">${icon('plus', 'sm')}</button>
+      </div>`;
+    const pinLink = `<button class="btn dashed" style="height:48px;width:100%;margin-top:12px" data-act="pinfrommap">${icon('pin', 'sm')}Can’t find it? Drop a pin</button>`;
+    const others = state.users.filter(u => u.id !== state.me);
     if (!q) {
-      list = nearest(BUILDINGS).slice(0, 15);
-      return `<div class="caps">Nearby · ${locNote()}</div>` + list.map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
+      return section('People', others.slice(0, 4).map(personRow)) +
+        section(`Architecture nearby · ${locNote()}`, nearest(BUILDINGS).slice(0, 15).map(placeRow)) + pinLink;
     }
-    list = BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q));
-    if (!list.length) return `<div class="empty">No places match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">${icon('pin', 'sm')}Drop a pin to add it</button>`;
-    return nearest(list).map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
+    const people = others.filter(u => u.handle.includes(q) || u.name.toLowerCase().includes(q));
+    const places = nearest(BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q))).slice(0, 40);
+    if (!people.length && !places.length) return `<div class="empty" style="margin-top:12px">Nothing matches “${esc(findQ)}”.</div>` + pinLink;
+    return section('People', people.slice(0, 5).map(personRow)) + section('Architecture', places.map(placeRow)) + pinLink;
   }
 
-  function viewFind(qs) {
-    if (qs === 'people') findTab = 'people';
+  function viewFind() {
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Find</div></div>
-      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, bridges, art, people" autocomplete="off" autocapitalize="none"></div>
-      <div class="tabs" style="margin:8px 16px 12px">
-        <button class="${findTab === 'buildings' ? 'on' : ''}" data-act="findtab" data-k="buildings">Places</button>
-        <button class="${findTab === 'people' ? 'on' : ''}" data-act="findtab" data-k="people">People</button>
-      </div>
+      <div class="topbar"><div class="h1">Search</div></div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Architecture, architects, cities or people" autocomplete="off" autocapitalize="none"></div>
       <div id="results" class="stack-6 pad">${findResults()}</div>
       <div class="spacer"></div>
-    </div>${nav('')}`;
+    </div>${nav('find')}`;
   }
 
   // ---------- Lists: Want to Visit (private) + custom lists shared with invited members ----------
@@ -1689,12 +1668,11 @@
       case 'signin': html = viewSignin(); break;
       case 'feed': html = viewHome('feed'); break;
       case 'map': html = viewHome('map'); after = initMap; break;
-      case 'find': html = viewFind(qs); break;
+      case 'find': html = viewFind(); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
       case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
       case 'save': html = viewSaveTo(seg[1]); break;
       case 'newlist': html = viewNewList(); break;
-      case 'top': html = viewTopRated(); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
@@ -1809,7 +1787,6 @@
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
     },
-    findtab(d) { findTab = d.k; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
