@@ -1,6 +1,6 @@
-# ThrowingShade
+# throwShade
 
-ThrowingShade: a mobile app for logging, rating and sharing the buildings you visit, like Beli for architecture.
+throwShade: a mobile app for logging, rating and sharing the buildings you visit, like Beli for architecture.
 
 A hackathon demo: a phone-sized local web app with no backend. See [SPEC.md](SPEC.md) for scope and [Throwing Shade — Screen Map.html](<Throwing Shade — Screen Map.html>) for the design mockups.
 

@@ -24,7 +24,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_JS = os.path.join(ROOT, 'app', 'data.js')
 OUT_JS = os.path.join(ROOT, 'app', 'wikidata.js')
-UA = 'ThrowingShade-hackathon/0.1 (local demo; building data import)'
+UA = 'throwShade-hackathon/0.1 (local demo; building data import)'
 SPARQL = 'https://query.wikidata.org/sparql'
 
 # Types that have an architect but aren't buildings you "visit" as architecture.

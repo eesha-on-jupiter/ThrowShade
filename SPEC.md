@@ -1,14 +1,14 @@
-# ThrowingShade — Product Spec
+# throwShade — Product Spec
 
-**Status:** Hackathon build v0.5 · **Date:** 2026-09-26
+**Status:** Hackathon build v0.7 · **Date:** 2026-09-26
 
-> ThrowingShade: a mobile app for logging, rating and sharing the buildings you visit, like Beli for architecture.
+> throwShade: a mobile app for logging, rating and sharing the buildings you visit, like Beli for architecture.
 
 ---
 
 ## 1. Overview
 
-ThrowingShade is a phone app for logging and sharing opinions on the buildings you visit. Every building a person visits goes into a personal log with a 1–5 star rating. Friends' logs become a way to discover architecture worth seeing.
+throwShade is a phone app for logging and sharing opinions on the buildings you visit. Every building a person visits goes into a personal log with a 1–5 star rating. Friends' logs become a way to discover architecture worth seeing.
 
 The UX borrows from **Beli**, the restaurant app: a friends feed, Been / Want to Visit lists, a map and clean building cards. The visual design follows `Throwing Shade — Screen Map.html` (see §9).
 
@@ -33,7 +33,7 @@ The recorded demo shows this flow end to end:
 | Profiles | All profiles and logs are public. No private profiles, no follow approval, no private notes. |
 | Architect verification | Left out. |
 | Platform | Local web app, phone-sized. No native build and no backend. |
-| Design | The mockups' look and layout; spec features win where the mockups differ (no ranks, head-to-head or trails). |
+| Design | Minimal restyle of the mockups' layout with icons (§9); spec features win where the mockups differ (no ranks, head-to-head or trails). |
 
 ## 4. Core loop
 
@@ -49,7 +49,7 @@ Five bottom tabs, with the mockups' square icons and a black centre "+".
 
 | Tab | Route | Purpose |
 | --- | --- | --- |
-| Home | `#/feed` | Feed / Map pill toggle, "Find" button top right |
+| Home | `#/feed` | Feed, with the wordmark and a search button |
 | Lists | `#/lists` | Been and Want to Visit |
 | + | `#/log` | Log flow (bottom sheet) |
 | Map | `#/map` | Same map as Home's Map toggle |
@@ -120,13 +120,23 @@ python tools/fetch_wikidata.py --global 450 --local 400 --radius 20 --city Chica
 
 ## 9. Visual design
 
-Taken from `Throwing Shade — Screen Map.html`:
+Minimal, built on the layout of `Throwing Shade — Screen Map.html`.
 
-- **Type:** IBM Plex Sans (bundled in `app/fonts`); wordmark in caps with 0.06em tracking.
-- **Colour:** ink `#1f1f1f` on white; greys `#6b6b6b`, `#c8c8c8`, `#e4e4e4`. The only colour is the style palette: Brutalist `#c2410c`, Modernist `#1d6f8c`, Postmodern `#7a8b2e`, Deconstructivist `#8a4fa0`, plus Art Deco, High-tech, Contemporary and Historic in the same muted range.
-- **Shapes:** 2px ink strokes on square buttons (44px targets); pill filters and toggles; 1.5px grey card borders with 6px radius; dashed borders for placeholders and secondary actions.
-- **Patterns:** bottom-sheet log flow over a grey scrim, with a grabber, step counter and progress bars; underline tabs; bordered stat boxes; bar charts drawn as outlined bars.
-- **Map:** greyscale OpenStreetMap tiles over the mockups' grid-paper background.
+- **Brand:** the name is **throwShade**, written in camel case as a bold wordmark. "Throw Shade" stays as the verb on the log button.
+- **Type:** IBM Plex Sans (bundled in `app/fonts`).
+- **Colour:**
+  - Ink `#1c1c1e` on white, with greys `#6e6e73` / `#a1a1a6` and hairlines `#ececea`.
+  - Other colour comes only from photos, the style palette on pins, chips and hatching, and the blue "you are here" dot.
+- **Surfaces:**
+  - No cards and no shadows on content. Feed items and list rows are separated by hairlines.
+  - Stat boxes use a faint fill.
+  - Shadows are kept only for floating elements: map controls, the map card, the log sheet and toasts.
+- **Controls:**
+  - Outlined 10px buttons with one solid black primary button per screen, pill filters, and text-style feed actions ("Want to visit", "Details").
+  - A flat bottom nav with a black "+".
+  - No Feed/Map toggle; Map is a nav tab.
+- **Icons:** inline line icons after Lucide (ISC licence) in `app.js` (`icon(name)`).
+- **Map:** greyscale OpenStreetMap tiles with style-coloured pins (filled = been, ring = want).
 
 ## 10. Tech
 
