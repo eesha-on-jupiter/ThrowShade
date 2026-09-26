@@ -299,7 +299,14 @@
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
-  let epPhoto;
+  let pickedPhoto;
+  // Profile picture chosen on sign-in or in Edit profile, applied on submit.
+  function setPicked(src) {
+    pickedPhoto = src;
+    document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+    const pv = document.getElementById('su-avatar');
+    if (pv) pv.style.backgroundImage = `url('${src}')`;
+  }
   const trail = [];
 
   // ---------- Views ----------
@@ -310,7 +317,13 @@
         <div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)}</div></div>
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
+    const pic = pickedPhoto ? ` style="background-image:url('${pickedPhoto}')"` : '';
     return `<div class="screen"><div class="signin">
+      <div class="signin-avatar">
+        <label class="avatar-edit" for="su-avatar-in" aria-label="Upload a profile photo"><div class="avatar lg" id="su-avatar"${pic}></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
+        <input id="su-avatar-in" type="file" accept="image/*" hidden data-change="suavatar">
+        <div class="avatar-picker strip">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${pickedPhoto === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div>
+      </div>
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
       <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
@@ -1282,7 +1295,8 @@
       if (state.users.some(u => u.handle === handle)) return toast('@' + handle + ' is taken');
       const id = 'u-' + Date.now().toString(36);
       const others = state.users.map(u => u.id);
-      state.users.push({ id, handle, name, bio: '' });
+      state.users.push(Object.assign({ id, handle, name, bio: '' }, pickedPhoto ? { photo: pickedPhoto } : {}));
+      pickedPhoto = undefined;
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.me = id; save();
@@ -1290,7 +1304,7 @@
       go('#/feed');
       setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
-    login(d) { state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    login(d) { pickedPhoto = undefined; state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -1336,11 +1350,10 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
-    closeedit() { epPhoto = undefined; back(); },
-    // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
+    closeedit() { pickedPhoto = undefined; back(); },
+    // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
     pickavatar(d, el) {
-      epPhoto = d.src;
-      document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+      setPicked(d.src);
       el.classList.add('on');
     },
     saveprofile() {
@@ -1352,8 +1365,8 @@
       if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
       if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
       u.name = name; u.handle = handle; u.bio = bio;
-      if (epPhoto) u.photo = epPhoto;
-      epPhoto = undefined;
+      if (pickedPhoto) u.photo = pickedPhoto;
+      pickedPhoto = undefined;
       save(); Sound.success();
       back(); toast('Profile updated');
     },
@@ -1489,6 +1502,9 @@
         else if (!url) toast('Couldn’t read one of those images');
         if (--pending === 0) render();
       }));
+    }
+    if (e.target.dataset && e.target.dataset.change === 'suavatar' && e.target.files[0]) {
+      resizeImage(e.target.files[0], 300, url => url ? setPicked(url) : toast('Couldn’t read that image'));
     }
     if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
       resizeImage(e.target.files[0], 300, url => {
