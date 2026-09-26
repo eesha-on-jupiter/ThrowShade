@@ -1,4 +1,4 @@
-// ThrowingShade — local demo web app. Vanilla JS, hash routing, state in localStorage.
+// throwShade — local demo web app. Vanilla JS, hash routing, state in localStorage.
 (function () {
   'use strict';
 
@@ -15,7 +15,7 @@
   const HOUR = 3600e3;
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
-  const LINE = '#c8c8c8';
+  const LINE = '#dcdad4';
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
 
   // ---------- Store ----------
@@ -105,15 +105,46 @@
   }
   function starsHTML(n, size) {
     let s = '';
-    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG('none', LINE);
+    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG(LINE, LINE);
     return `<span class="stars ${size || ''}" role="img" aria-label="${n} out of 5 stars">${s}</span>`;
   }
   function scoreHTML(val) {
     return `<span class="score">${val}${starSVG(INK, INK)}</span>`;
   }
+
+  // Line icons, paths after Lucide (ISC licence) — drawn with currentColor so they follow the text colour.
+  const ICONS = {
+    home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+    bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    bookmarkCheck: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="m9 10 2 2 4-4"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    map: '<path d="M14.1 5.1 9.9 3 3.6 5.2A1 1 0 0 0 3 6.1v13.3a.7.7 0 0 0 1 .6l5-2 4.1 2.1 6.3-2.2a1 1 0 0 0 .6-.9V3.7a.7.7 0 0 0-1-.6z"/><path d="M9.9 3v15M14.1 5.1V21"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+    locate: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    share: '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4M12 2v13"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    chevron: '<path d="m9 18 6-6-6-6"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
+    navigate: '<path d="m3 11 19-9-9 19-2-8z"/>',
+    external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+    switch: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
+    building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+  };
+  function icon(name, size) {
+    return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+  }
   // Hatching: architectural "shade" drawn in the building's style colour — stands in for a photo.
   function hatchURL(color) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#e4e4e4"/><path d="M-2.5 2.5l5-5M0 10L10 0M7.5 12.5l5-5" stroke="${color}" stroke-width="1.4" stroke-opacity=".6"/></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#efeeea"/><path d="M-2.5 2.5l5-5M0 10L10 0M7.5 12.5l5-5" stroke="${color}" stroke-width="1.2" stroke-opacity=".42"/></svg>`;
     return `url('data:image/svg+xml,${encodeURIComponent(svg)}')`;
   }
   function hatch(color) {
@@ -146,13 +177,13 @@
     return `<div class="avatar ${size || ''}" data-go="#/u/${u.id}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</div>`;
   }
   function nav(active) {
-    const item = (key, href, label) => `<a href="${href}" class="${active === key ? 'on' : ''}"><div class="ic"></div>${label}</a>`;
+    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon(ic)}${label}</a>`;
     return `<nav class="nav">
-      ${item('home', '#/feed', 'Home')}
-      ${item('lists', '#/lists', 'Lists')}
-      <a href="#/log" class="plus" aria-label="Log a building">+</a>
-      ${item('map', '#/map', 'Map')}
-      ${item('you', '#/me', 'You')}
+      ${item('home', '#/feed', 'Home', 'home')}
+      ${item('lists', '#/lists', 'Lists', 'bookmark')}
+      <a href="#/log" class="plus" aria-label="Log a building">${icon('plus')}</a>
+      ${item('map', '#/map', 'Map', 'map')}
+      ${item('you', '#/me', 'You', 'user')}
     </nav>`;
   }
 
@@ -189,9 +220,9 @@
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
     return `<div class="screen"><div class="signin">
-      <div class="mark">THROWING<br>SHADE</div>
+      <div class="mark">throwShade</div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="ph hatch-band" style="${hatch(INK)}"></div>
+      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
@@ -206,28 +237,24 @@
     const mine = v.userId === state.me;
     const mv = myVisit(b.id);
     let action;
-    if (mine) action = `<button class="btn block" data-go="#/log/${b.id}">Edit critique</button>`;
-    else if (mv) action = `<button class="btn block" data-go="#/b/${b.id}">Been · you gave ${mv.stars}★</button>`;
-    else action = `<button class="btn block ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? '✓ On Want to Visit' : '+ Want to Visit'}</button>`;
+    if (mine) action = `<button class="link" data-go="#/log/${b.id}">${icon('edit', 'sm')}Edit</button>`;
+    else if (mv) action = `<button class="link" data-go="#/b/${b.id}">${icon('check', 'sm')}Been · you gave ${mv.stars}★</button>`;
+    else action = `<button class="link ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`;
     return `<div class="card">
       <div class="card-head">
         ${avatar(u)}
         <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(b.city)} · ${ago(v.createdAt)}</div></div>
         ${scoreHTML(v.stars)}
       </div>
-      ${ph(b, { photo: v.photo, w: 720, style: 'height:180px', label: phLabel(b) })}
+      ${ph(b, { photo: v.photo, w: 720, style: 'height:200px', label: phLabel(b) })}
       ${v.note ? `<div class="quote">“${esc(v.note)}”</div>` : ''}
-      <div class="row-flex">${action}<button class="btn" style="width:64px" data-go="#/b/${b.id}">Open</button></div>
+      <div class="card-actions">${action}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
     </div>`;
   }
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar"><div class="wordmark">THROWING SHADE</div><button class="btn-sq" aria-label="Search" data-go="#/find">Find</button></div>
-      <div class="toggle">
-        <button class="${tab === 'feed' ? 'on' : ''}" data-go="#/feed">Feed</button>
-        <button class="${tab === 'map' ? 'on' : ''}" data-go="#/map">Map</button>
-      </div>`;
+      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : '<div class="wordmark">throwShade</div>'}<button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>`;
     if (tab === 'map') {
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
@@ -236,12 +263,12 @@
         <div class="map-wrap" style="position:relative;flex:1">
           <div id="map"></div>
           <div class="map-legend" id="legend">
-            <button class="legend-toggle" data-act="legend">Styles ▾</button>
+            <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles</button>
             <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
               <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div></div>
           </div>
-          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">Locate</button>
-          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">Pin</button>
+          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
+          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">${icon('pin')}</button>
           <div class="map-hint" id="map-hint" hidden>Tap a building to add it · or long-press</div>
           <div id="map-card"></div>
         </div>
@@ -250,7 +277,7 @@
     const fids = followingIds(state.me);
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
-      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">Find people</button>`;
+      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
     return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
@@ -281,15 +308,15 @@
       return `<div class="caps">Nearby · ${locNote()}</div>` + list.map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
     }
     list = BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology].join(' ').toLowerCase().includes(q));
-    if (!list.length) return `<div class="empty">No buildings match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">Drop a pin to add it</button>`;
+    if (!list.length) return `<div class="empty">No buildings match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">${icon('pin', 'sm')}Drop a pin to add it</button>`;
     return nearest(list).map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
   }
 
   function viewFind(qs) {
     if (qs === 'people') findTab = 'people';
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button><div class="h1 grow">Find</div></div>
-      <div class="pad"><input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, architects, cities, people" autocomplete="off" autocapitalize="none"></div>
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Find</div></div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, architects, cities, people" autocomplete="off" autocapitalize="none"></div>
       <div class="tabs" style="margin:8px 16px 12px">
         <button class="${findTab === 'buildings' ? 'on' : ''}" data-act="findtab" data-k="buildings">Buildings</button>
         <button class="${findTab === 'people' ? 'on' : ''}" data-act="findtab" data-k="people">People</button>
@@ -315,10 +342,10 @@
           ${ph(b, { style: 'width:38px;height:38px', go: false })}
           <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)}${loved ? ` · ${loved} friend${loved > 1 ? 's' : ''} loved it` : ''}</div></div>
           ${a.avg ? `<b>${a.avg.toFixed(1)}</b>` : ''}
-          <button class="btn-sq thin" style="width:36px;height:36px;font-size:13px" data-act="unwant" data-id="${b.id}" aria-label="Remove">✕</button>
+          <button class="btn-sq thin" style="width:34px;height:34px" data-act="unwant" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>
         </div>`;
       }).join('') : `<div class="empty">Nothing saved yet.<br>Tap “+ Want to Visit” on a friend’s log.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/find">+ Find buildings</button>`;
+      body += `<button class="btn dashed" style="height:56px" data-go="#/find">${icon('search', 'sm')}Find buildings</button>`;
     } else {
       const vs = visitsBy(state.me).slice().sort(listSort === 'top' ? (a, b) => b.stars - a.stars || b.createdAt - a.createdAt : (a, b) => b.createdAt - a.createdAt);
       const pill = (k, l) => `<button class="pill ${listSort === k ? 'on' : ''}" data-act="sort" data-k="${k}">${l}</button>`;
@@ -332,7 +359,7 @@
           ${starsHTML(v.stars)}
         </button>`;
       }).join('') : `<div class="empty">You haven’t logged anything yet.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/log">+ Log a building</button>`;
+      body += `<button class="btn dashed" style="height:56px" data-go="#/log">${icon('plus', 'sm')}Log a building</button>`;
     }
     return `<div class="screen with-nav">
       <div class="topbar"><div class="h1">Lists</div></div>
@@ -374,16 +401,16 @@
       : heroIsCommons ? `<div class="credit"><a href="${esc(commonsURL(b.image, 1200))}" target="_blank" rel="noopener">Photo: Wikimedia Commons</a></div>` : '';
     const q = encodeURIComponent(b.name + (b.city ? ' ' + b.city : ''));
     const links = [
-      b.wiki && `<a class="chip" href="${esc(b.wiki)}" target="_blank" rel="noopener">Wikipedia ↗</a>`,
-      b.osm && `<a class="chip" href="https://www.openstreetmap.org/${esc(b.osm)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`,
-      `<a class="chip dashed" href="https://www.archdaily.com/search/all?q=${encodeURIComponent(b.name)}" target="_blank" rel="noopener">ArchDaily ↗</a>`,
-      `<a class="chip dashed" href="https://www.dezeen.com/?s=${q}" target="_blank" rel="noopener">Dezeen ↗</a>`,
+      b.wiki && `<a class="chip" href="${esc(b.wiki)}" target="_blank" rel="noopener">Wikipedia${icon('external', 'sm')}</a>`,
+      b.osm && `<a class="chip" href="https://www.openstreetmap.org/${esc(b.osm)}" target="_blank" rel="noopener">OpenStreetMap${icon('external', 'sm')}</a>`,
+      `<a class="chip dashed" href="https://www.archdaily.com/search/all?q=${encodeURIComponent(b.name)}" target="_blank" rel="noopener">ArchDaily${icon('external', 'sm')}</a>`,
+      `<a class="chip dashed" href="https://www.dezeen.com/?s=${q}" target="_blank" rel="noopener">Dezeen${icon('external', 'sm')}</a>`,
     ].filter(Boolean).join('');
     const adder = b.addedBy && user(b.addedBy);
     return `<div class="screen">
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
-        <button class="btn-sq arrow left" data-act="back" aria-label="Back">←</button>
-        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">Share</button>` })}
+        <button class="btn-sq left" data-act="back" aria-label="Back">${icon('back')}</button>
+        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">${icon('share')}</button>` })}
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
@@ -398,8 +425,8 @@
         </div>
         <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
         <div class="row-flex">
-          ${mv ? '' : `<button class="btn block ${want ? 'on' : ''}" style="font-size:14px" data-act="want" data-id="${b.id}">${want ? '✓ Want to Visit' : '+ Want to Visit'}</button>`}
-          <a class="btn block" style="font-size:14px" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">Directions</a>
+          ${mv ? '' : `<button class="btn block ${want ? 'on' : ''}" data-act="want" data-id="${b.id}">${want ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`}
+          <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
         <div class="about">
           <div class="bold">About</div>
@@ -452,27 +479,27 @@
 
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
-      ${own ? '' : `<div class="topbar" style="padding-bottom:0"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button></div>`}
-      <div style="display:flex;gap:14px;align-items:center;padding:16px">
+      ${own ? '' : `<div class="topbar" style="padding-bottom:0"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button></div>`}
+      <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
         ${avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : ''}</div>
       </div>
-      <div class="stat-table" style="margin:0 16px">
+      <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
         <div><b>${followerCount(uid)}</b><div class="tiny muted">Followers</div></div>
         <div><b>${followingIds(uid).size}</b><div class="tiny muted">Following</div></div>
       </div>
-      ${own ? '' : `<div class="pad" style="margin-top:12px">${following
-        ? `<button class="btn" style="width:100%;height:48px;font-size:14px;font-weight:600" data-act="follow" data-id="${uid}">Following</button>`
+      ${own ? '' : `<div class="pad" style="margin-top:14px">${following
+        ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
       <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
-        <div><div class="bold" style="margin-bottom:8px">Top 4</div><div class="top4">${top}${topFill}</div></div>
-        <div><div style="display:flex;justify-content:space-between;margin-bottom:8px"><b>Tier list</b><span class="small muted">Avg ${avg}★</span></div>
+        <div class="section"><div class="section-title">Top 4</div><div class="top4">${top}${topFill}</div></div>
+        <div class="section"><div class="section-title">Tier list<span class="small muted" style="font-weight:500">Avg ${avg}★</span></div>
           <div class="stack-6">${tiers || '<div class="empty">No ratings yet.</div>'}</div></div>
-        ${bars ? `<div><div class="bold" style="margin-bottom:8px">By style</div><div class="stack-6" style="gap:8px">${bars}</div></div>` : ''}
-        <div><div class="bold" style="margin-bottom:8px">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
-        ${own ? `<div class="row-flex"><button class="btn block" data-act="switch">Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${resetArmed ? 'Tap again to reset' : 'Reset demo data'}</button></div>` : ''}
+        ${bars ? `<div class="section"><div class="section-title">By style</div><div class="stack-6" style="gap:10px">${bars}</div></div>` : ''}
+        <div><div class="section-title" style="padding:0 2px">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+        ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
     </div>${nav(own ? 'you' : '')}`;
@@ -504,9 +531,9 @@
 
   function viewLogPick() {
     return sheet('Throw Shade', 1, 2,
-      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">✕</button>`,
-      `<input class="input" data-input="logq" placeholder="Search a building, architect or city" autocomplete="off">
-       <button class="btn dashed" style="height:48px" data-act="pinfrommap">Not listed? Drop a pin on the map</button>
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
+      `<div class="input-wrap">${icon('search')}<input class="input" data-input="logq" placeholder="Search a building, architect or city" autocomplete="off"></div>
+       <button class="btn dashed" style="height:48px" data-act="pinfrommap">${icon('pin', 'sm')}Not listed? Drop a pin on the map</button>
        <div id="logresults" class="stack-6">${logResults('')}</div>`);
   }
 
@@ -517,11 +544,11 @@
       const mv = myVisit(bid);
       draft = mv ? { bid, stars: mv.stars, note: mv.note || '', date: mv.visitedOn, photo: mv.photo } : { bid, stars: 0, note: '', date: isoDate(Date.now()), photo: null };
     }
-    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('#fff', '#fff') : starSVG('none', INK)}</button>`).join('');
+    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6')}</button>`).join('');
     const editing = !!myVisit(bid);
     return sheet('Your critique', 2, 2,
-      `<button class="btn-sq thin" data-go="#/log" aria-label="Back">←</button>`,
-      `<div style="display:flex;gap:12px;align-items:center;border:1.5px solid var(--line);border-radius:6px;padding:10px">
+      `<button class="btn-sq thin" data-go="#/log" aria-label="Back">${icon('back')}</button>`,
+      `<div class="banner" style="display:flex;gap:12px;align-items:center;padding:10px">
          ${ph(b, { style: 'width:56px;height:56px', go: false })}
          <div style="line-height:1.3"><b style="font-size:16px">${esc(b.name)}</b><div class="small muted">${esc(byLine(b))}</div></div>
        </div>
@@ -530,9 +557,9 @@
        <div class="field"><label for="visitdate">Date visited</label><input id="visitdate" class="input" type="date" data-input="date" value="${draft.date}" max="${isoDate(Date.now())}"></div>
        <div class="field"><div class="label">Photo <span class="muted" style="font-weight:400">(optional)</span></div>
          <div style="display:flex;gap:10px">
-           <label class="photo-add" for="photo-in" aria-label="Add photo">+</label>
+           <label class="photo-add" for="photo-in" aria-label="Add photo">${icon('camera', 'lg')}</label>
            ${draft.photo ? `<div class="ph photo" style="width:80px;height:80px;background-image:url('${draft.photo}');background-size:cover;background-position:center">
-              <button class="btn-sq thin" style="position:absolute;right:2px;top:2px;width:26px;height:26px;font-size:11px" data-act="rmphoto" aria-label="Remove photo">✕</button></div>`
+              <button class="btn-sq thin" style="position:absolute;right:4px;top:4px;width:26px;height:26px" data-act="rmphoto" aria-label="Remove photo">${icon('x', 'sm')}</button></div>`
              : `<div class="ph" style="width:80px;height:80px"></div>`}
          </div>
          <input id="photo-in" type="file" accept="image/*" hidden data-change="photo"></div>
@@ -543,7 +570,7 @@
   }
 
   function viewNotFound() {
-    return `<div class="screen with-nav"><div class="topbar"><button class="btn-sq thin arrow" data-act="back">←</button></div>
+    return `<div class="screen with-nav"><div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button></div>
       <div class="pad"><div class="empty">That page doesn’t exist.</div></div></div>${nav('')}`;
   }
 
@@ -592,7 +619,7 @@
       ${ph(b, { w: 160, style: 'width:64px;height:64px', go: false })}
       <div class="grow" style="line-height:1.3"><b>${esc(b.name)}</b><div class="small muted">${esc(byLine(b))}</div>
         <div class="small">${esc(b.city)} · ${fmtKm(km(loc, b))}${mv ? ` · you: ${mv.stars}★` : ''}</div></div>
-      <div style="font-size:20px">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:20px"') : '<span class="small muted">No logs</span>'}</div>
+      <div style="font-size:20px">${a.avg ? scoreHTML(a.avg.toFixed(1)) : '<span class="small muted">No logs</span>'}</div>
     </button>`;
   }
   function initMap() {
@@ -791,12 +818,12 @@
     const pills = Object.entries(STYLES).map(([s, c]) =>
       `<button class="pill ${nameStyle === s ? 'on' : ''}" data-act="pickstyle" data-k="${s}"><span class="dot" style="background:${c}"></span> ${s}</button>`).join('');
     return sheet('What’s here?', 1, 2,
-      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">✕</button>`,
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
       `<div id="pinmap" class="pin-map"></div>
        <div class="caps">Pin · ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
-       ${near.length ? `<div class="stack-6"><div class="caps">Already on Throwing Shade</div>${nearRows}</div>` : ''}
+       ${near.length ? `<div class="stack-6"><div class="caps">Already on throwShade</div>${nearRows}</div>` : ''}
        <div class="stack-6"><div class="caps">From OpenStreetMap</div><div id="osm-results" class="stack-6">${osmResultsHTML(key)}</div></div>
-       <button class="btn dashed" style="height:56px" data-act="nameit">+ Name it yourself</button>
+       <button class="btn dashed" style="height:52px" data-act="nameit">${icon('edit', 'sm')}Name it yourself</button>
        <div id="nameit" class="stack" hidden>
          <div class="field"><label for="nb-name">Building name</label><input id="nb-name" class="input" autocomplete="off" placeholder="${esc((lookups[key] && lookups[key].address) || 'e.g. The corner pavilion')}"></div>
          <div class="row-flex">
@@ -1004,7 +1031,7 @@
     },
     share(d) {
       const b = BY_ID[d.id], mv = myVisit(d.id);
-      const text = mv ? `I gave ${b.name} ${mv.stars}★ on Throwing Shade` : `${b.name} by ${b.architect} — on Throwing Shade`;
+      const text = mv ? `I gave ${b.name} ${mv.stars}★ on throwShade` : `${b.name} by ${b.architect} — on throwShade`;
       if (navigator.share) navigator.share({ title: b.name, text }).catch(() => {});
       else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'), () => toast(text));
       else toast(text);
@@ -1020,7 +1047,7 @@
       const existing = BUILDINGS.find(b => b.osm === r.osm) ||
         (r.tags.wikidata && BUILDINGS.find(b => b.qid === r.tags.wikidata)) ||
         (r.name && BUILDINGS.find(b => km(b, r) < 0.08 && sameName(b.name, r.name)));
-      if (existing) { toast(existing.name + ' is already on Throwing Shade'); go('#/log/' + existing.id); return; }
+      if (existing) { toast(existing.name + ' is already on throwShade'); go('#/log/' + existing.id); return; }
       const b = {
         id: 'osm-' + r.osm.replace('/', '-'), name: r.name || r.addr || (L0.address ? 'Building at ' + L0.address : 'Unnamed building'),
         architect: r.tags.architect || '', year: r.year, typology: r.typ, style: r.style,
@@ -1061,7 +1088,7 @@
       document.querySelectorAll('#star-input button').forEach((btn, i) => {
         const on = i < draft.stars;
         btn.classList.toggle('on', on);
-        btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', INK);
+        btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6');
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },

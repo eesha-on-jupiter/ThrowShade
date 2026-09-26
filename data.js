@@ -1,4 +1,4 @@
-// Seed data for the ThrowingShade demo. Plain script (no modules) so the app also runs from file://.
+// Seed data for the throwShade demo. Plain script (no modules) so the app also runs from file://.
 
 // Where "Nearby" sorts from when the browser can't (or won't) give a real location.
 // The Chicago Loop for now — change to the hackathon venue.
