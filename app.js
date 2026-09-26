@@ -16,6 +16,7 @@
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
   const LINE = '#c8c8c8';
+  const GOLD = '#ffb100';
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
 
   // ---------- Store ----------
@@ -103,13 +104,58 @@
   function starSVG(fill, stroke) {
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="${fill}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
   }
+  const ICON_PATHS = {
+    home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h5v-6h3v6h5v-9.5"/>',
+    lists: '<path d="M6 3.5h12v17l-6-4-6 4z"/>',
+    map: '<path d="M9 4.2 3.5 6v14l5.5-1.8 6 1.8 5.5-1.8V4.2L14.5 6z"/><path d="M9 4.2v14M14.5 6v14"/>',
+    you: '<circle cx="12" cy="8.2" r="3.3"/><path d="M5 20c1.1-4.1 4.3-5.9 7-5.9s5.9 1.8 7 5.9"/>',
+    search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15.3 15.3 20.5 20.5"/>',
+    locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>',
+    pin: '<path d="M12 21.5S5.5 14.7 5.5 9.7a6.5 6.5 0 1 1 13 0c0 5-6.5 11.8-6.5 11.8z"/><circle cx="12" cy="9.6" r="2.1"/>',
+    share: '<circle cx="6" cy="12" r="2.1"/><circle cx="18" cy="6" r="2.1"/><circle cx="18" cy="18" r="2.1"/><path d="M8 10.8 16 7M8 13.2l8 3.8"/>',
+    camera: '<path d="M4 8.5h3.2L9 5.5h6l1.8 3H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/>',
+    edit: '<path d="M4 20l1-4.2L15.8 5A2 2 0 0 1 18.6 5l0.4.4A2 2 0 0 1 19 8.2L8.2 19z"/><path d="M14 6.8l3.2 3.2"/>',
+  };
+  function icon(name, size) {
+    const s = size || 20;
+    return `<svg class="icon" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+  }
+
+  // ---------- Sound ----------
+  const Sound = (() => {
+    let ctx;
+    function ensure() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    function tone(freq, dur, type, vol, delay) {
+      try {
+        const c = ensure();
+        const t0 = c.currentTime + (delay || 0);
+        const osc = c.createOscillator(), gain = c.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq, t0);
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(vol || 0.05, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(gain).connect(c.destination);
+        osc.start(t0); osc.stop(t0 + dur + 0.02);
+      } catch (e) { /* ignore: no audio support */ }
+    }
+    return {
+      tap() { tone(520, 0.05, 'square', 0.025); },
+      star() { tone(720, 0.07, 'sine', 0.05); },
+      success() { tone(660, 0.09, 'sine', 0.05); tone(880, 0.13, 'sine', 0.05, 0.09); },
+    };
+  })();
   function starsHTML(n, size) {
     let s = '';
-    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG('none', LINE);
+    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(GOLD, GOLD) : starSVG('none', LINE);
     return `<span class="stars ${size || ''}" role="img" aria-label="${n} out of 5 stars">${s}</span>`;
   }
   function scoreHTML(val) {
-    return `<span class="score">${val}${starSVG(INK, INK)}</span>`;
+    return `<span class="score">${val}${starSVG(GOLD, GOLD)}</span>`;
   }
   // Hatching: architectural "shade" drawn in the building's style colour — stands in for a photo.
   function hatchURL(color) {
@@ -143,10 +189,11 @@
   const phLabel = b => [b.style, b.year].filter(Boolean).join(' · ').toUpperCase();
   const byLine = b => [b.architect, b.year].filter(Boolean).join(' · ');
   function avatar(u, size) {
-    return `<div class="avatar ${size || ''}" data-go="#/u/${u.id}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</div>`;
+    const bg = u.photo ? `style="background-image:url('${u.photo}');background-size:cover;background-position:center"` : '';
+    return `<div class="avatar ${size || ''}" ${bg} data-go="#/u/${u.id}" aria-label="${esc(u.name)}">${u.photo ? '' : esc(initials(u.name))}</div>`;
   }
   function nav(active) {
-    const item = (key, href, label) => `<a href="${href}" class="${active === key ? 'on' : ''}"><div class="ic"></div>${label}</a>`;
+    const item = (key, href, label) => `<a href="${href}" class="${active === key ? 'on' : ''}"><div class="ic">${icon(key)}</div>${label}</a>`;
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home')}
       ${item('lists', '#/lists', 'Lists')}
@@ -223,7 +270,7 @@
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar"><div class="wordmark">THROWING SHADE</div><button class="btn-sq" aria-label="Search" data-go="#/find">Find</button></div>
+      <div class="topbar"><div class="wordmark">THROWING SHADE</div><button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>
       <div class="toggle">
         <button class="${tab === 'feed' ? 'on' : ''}" data-go="#/feed">Feed</button>
         <button class="${tab === 'map' ? 'on' : ''}" data-go="#/map">Map</button>
@@ -240,8 +287,8 @@
             <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
               <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div></div>
           </div>
-          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">Locate</button>
-          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">Pin</button>
+          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
+          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">${icon('pin')}</button>
           <div class="map-hint" id="map-hint" hidden>Tap a building to add it · or long-press</div>
           <div id="map-card"></div>
         </div>
@@ -383,7 +430,7 @@
     return `<div class="screen">
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
         <button class="btn-sq arrow left" data-act="back" aria-label="Back">←</button>
-        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">Share</button>` })}
+        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">${icon('share')}</button>` })}
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
@@ -452,16 +499,19 @@
 
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
-      ${own ? '' : `<div class="topbar" style="padding-bottom:0"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button></div>`}
+      <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button><div class="grow"></div>`}
+        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}</div>
       <div style="display:flex;gap:14px;align-items:center;padding:16px">
-        ${avatar(u, 'lg').replace('data-go', 'data-x')}
-        <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : ''}</div>
+        ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 14)}</span></label>
+          <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
+          : avatar(u, 'lg').replace('data-go', 'data-x')}
+        <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted">Add a bio</div>` : '')}</div>
       </div>
       <div class="stat-table" style="margin:0 16px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
-        <div><b>${followerCount(uid)}</b><div class="tiny muted">Followers</div></div>
-        <div><b>${followingIds(uid).size}</b><div class="tiny muted">Following</div></div>
+        <div data-go="#/followers/${uid}"><b>${followerCount(uid)}</b><div class="tiny muted">Followers</div></div>
+        <div data-go="#/following/${uid}"><b>${followingIds(uid).size}</b><div class="tiny muted">Following</div></div>
       </div>
       ${own ? '' : `<div class="pad" style="margin-top:12px">${following
         ? `<button class="btn" style="width:100%;height:48px;font-size:14px;font-weight:600" data-act="follow" data-id="${uid}">Following</button>`
@@ -476,6 +526,39 @@
       </div>
       <div class="spacer"></div>
     </div>${nav(own ? 'you' : '')}`;
+  }
+
+  function viewFollowList(uid, kind) {
+    const u = user(uid);
+    if (!u) return viewNotFound();
+    const ids = kind === 'followers'
+      ? state.follows.filter(f => f[1] === uid).map(f => f[0])
+      : Array.from(followingIds(uid));
+    const people = ids.map(user).filter(Boolean);
+    const rows = people.length ? people.map(p => {
+      const f = isFollowing(state.me, p.id);
+      const self = p.id === state.me;
+      return `<div class="row" data-go="#/u/${p.id}">
+        ${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><div class="sub">@${esc(p.handle)} · ${visitsBy(p.id).length} logged</div></div>
+        ${self ? '' : `<button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${p.id}">${f ? 'Following' : 'Follow'}</button>`}
+      </div>`;
+    }).join('') : `<div class="empty">${kind === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button><div class="h1 grow">${kind === 'followers' ? 'Followers' : 'Following'}</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewEditProfile() {
+    const u = me();
+    return sheet('Edit profile', 1, 1,
+      `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">✕</button>`,
+      `<div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
+       <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
+       <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
+         <div class="counter" id="ep-bio-count">${(u.bio || '').length} / 140</div></div>
+       <div class="sheet-foot"><button class="btn-primary" data-act="saveprofile">Save</button></div>`);
   }
 
   function sheet(title, step, total, left, body) {
@@ -888,6 +971,27 @@
     reader.readAsDataURL(file);
   }
 
+  // ---------- Confetti ----------
+  function celebrate() {
+    const old = root.querySelector('.confetti'); if (old) old.remove();
+    const host = document.createElement('div');
+    host.className = 'confetti';
+    const colors = ['#ff5a36', '#ffb100', '#1d6f8c', '#7a8b2e', '#8a4fa0'];
+    for (let i = 0; i < 16; i++) {
+      const p = document.createElement('span');
+      const dx = Math.random() * 220 - 110, dy = Math.random() * -180 - 30;
+      p.style.setProperty('--dx', dx + 'px');
+      p.style.setProperty('--dy', dy + 'px');
+      p.style.setProperty('--rot', (Math.random() * 360) + 'deg');
+      p.style.background = colors[i % colors.length];
+      p.style.left = (35 + Math.random() * 30) + '%';
+      p.style.animationDelay = (Math.random() * 0.1) + 's';
+      host.appendChild(p);
+    }
+    root.appendChild(host);
+    setTimeout(() => host.remove(), 950);
+  }
+
   // ---------- Toast ----------
   let toastTimer;
   function toast(msg) {
@@ -934,6 +1038,9 @@
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); break;
       case 'u': html = viewProfile(seg[1]); break;
+      case 'followers': html = viewFollowList(seg[1], 'followers'); break;
+      case 'following': html = viewFollowList(seg[1], 'following'); break;
+      case 'editprofile': html = viewEditProfile(); break;
       case 'log': html = seg[1] ? viewLogRate(seg[1]) : viewLogPick(); break;
       case 'pin': {
         const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(seg[1] || '');
@@ -965,9 +1072,11 @@
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.me = id; save();
-      go('#/feed'); toast('Welcome, @' + handle);
+      Sound.success();
+      go('#/feed');
+      setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
-    login(d) { state.me = d.id; save(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    login(d) { state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -980,6 +1089,7 @@
     back,
     want(d) {
       const i = state.want.findIndex(w => w.userId === state.me && w.buildingId === d.id);
+      Sound.tap();
       if (i >= 0) { state.want.splice(i, 1); toast('Removed from Want to Visit'); }
       else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); toast('Saved to Want to Visit'); }
       save(); render();
@@ -1010,6 +1120,19 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    closeedit() { back(); },
+    saveprofile() {
+      const u = me();
+      const name = document.getElementById('ep-name').value.trim();
+      const handle = document.getElementById('ep-handle').value.trim().toLowerCase().replace(/^@/, '');
+      const bio = document.getElementById('ep-bio').value.trim();
+      if (!name) return toast('Add a display name');
+      if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
+      if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
+      u.name = name; u.handle = handle; u.bio = bio;
+      save(); Sound.success();
+      back(); toast('Profile updated');
+    },
     droppin() {
       setPinMode(!pinMode);
     },
@@ -1057,11 +1180,13 @@
       nameStyle = null;
     },
     star(d) {
+      Sound.star();
       draft.stars = +d.n;
       document.querySelectorAll('#star-input button').forEach((btn, i) => {
         const on = i < draft.stars;
         btn.classList.toggle('on', on);
         btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', INK);
+        if (on) { btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
@@ -1085,12 +1210,13 @@
         save();
         msg = 'Saved without the photo — browser storage is full';
       }
+      Sound.success();
       const bid = draft.bid;
       draft = null;
       bTab = 'critiques';
       trail.push('/b/' + bid);
       location.replace('#/b/' + bid);
-      setTimeout(() => toast(msg), 30);
+      setTimeout(() => { celebrate(); toast(msg); }, 30);
     },
   };
 
@@ -1099,6 +1225,7 @@
     logq(el) { document.getElementById('logresults').innerHTML = logResults(el.value); },
     note(el) { draft.note = el.value; document.getElementById('note-count').textContent = el.value.length + ' / 280'; },
     date(el) { draft.date = el.value || isoDate(Date.now()); },
+    epbio(el) { document.getElementById('ep-bio-count').textContent = el.value.length + ' / 140'; },
   };
 
   root.addEventListener('click', e => {
@@ -1113,6 +1240,13 @@
       resizeImage(e.target.files[0], 900, url => {
         if (!url) return toast('Couldn’t read that image');
         if (draft) { draft.photo = url; render(); }
+      });
+    }
+    if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
+      resizeImage(e.target.files[0], 300, url => {
+        if (!url) return toast('Couldn’t read that image');
+        me().photo = url;
+        save(); Sound.success(); render();
       });
     }
   });
