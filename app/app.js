@@ -1,4 +1,4 @@
-// ThrowingShade — local demo web app. Vanilla JS, hash routing, state in localStorage.
+// throwShade — local demo web app. Vanilla JS, hash routing, state in localStorage.
 (function () {
   'use strict';
 
@@ -15,20 +15,44 @@
   const HOUR = 3600e3;
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
-  const LINE = '#c8c8c8';
+  const LINE = '#dcdad4';
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
+  // What a rater liked — toggled as chips in the log sheet, shown on the feed and summed per place.
+  const ASPECTS = ['Design', 'Material', 'Structure', 'Facade', 'Light', 'Space', 'Interior', 'Detail', 'Craft',
+    'Context', 'Landscape', 'Views', 'Scale', 'Concept', 'Engineering', 'Atmosphere', 'Sustainability'];
+  const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
+  const kindOf = b => b.kind || 'building';
+  const MAX_PHOTOS = 4;
+  // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
+  const STYLE_LIKES = {
+    Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
+    Deconstructivist: ['Design', 'Concept', 'Facade'], 'Art Deco': ['Facade', 'Detail', 'Craft'], 'High-tech': ['Structure', 'Engineering', 'Design'],
+    Contemporary: ['Design', 'Material', 'Context'], Historic: ['Craft', 'Detail', 'Facade'],
+  };
 
   // ---------- Store ----------
   let state = load() || seed();
   state.places.forEach(registerBuilding);
+  // Older saves stored a single `photo` per log and no liked aspects.
+  state.visits.forEach(v => {
+    if (!v.photos) v.photos = v.photo ? [v.photo] : [];
+    delete v.photo;
+    if (!v.likes) v.likes = [];
+  });
 
   function seed() {
     const now = Date.now();
     const users = window.TS_SEED_USERS.map(u => ({ ...u }));
     const follows = [];
     users.forEach(a => users.forEach(b => { if (a.id !== b.id) follows.push([a.id, b.id]); }));
+    const seedLikes = (userId, bid, stars, i) => {
+      const set = (window.TS_SEED_LIKES || {})[userId + '|' + bid];
+      if (set) return set.slice();
+      const b = BY_ID[bid];
+      return !b || stars < 3 ? [] : (STYLE_LIKES[b.style] || ['Design']).slice(0, 2 + (i % 2));
+    };
     const visits = window.TS_SEED_VISITS.map(([userId, buildingId, stars, note, h], i) => ({
-      id: 'v' + i, userId, buildingId, stars, note, photo: null,
+      id: 'v' + i, userId, buildingId, stars, note, photos: [], likes: seedLikes(userId, buildingId, stars, i),
       visitedOn: isoDate(now - h * HOUR - (i % 4) * DAY),
       createdAt: now - h * HOUR,
     }));
@@ -59,8 +83,8 @@
     return { avg: vs.reduce((s, v) => s + v.stars, 0) / vs.length, n: vs.length };
   }
   function photoFor(bid) {
-    const vs = visitsFor(bid).filter(v => v.photo).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
-    return vs.length ? vs[0].photo : null;
+    const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
+    return vs.length ? vs[0].photos[0] : null;
   }
 
   // ---------- Formatting ----------
@@ -105,15 +129,46 @@
   }
   function starsHTML(n, size) {
     let s = '';
-    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG('none', LINE);
+    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG(LINE, LINE);
     return `<span class="stars ${size || ''}" role="img" aria-label="${n} out of 5 stars">${s}</span>`;
   }
   function scoreHTML(val) {
     return `<span class="score">${val}${starSVG(INK, INK)}</span>`;
   }
+
+  // Line icons, paths after Lucide (ISC licence) — drawn with currentColor so they follow the text colour.
+  const ICONS = {
+    home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+    bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    bookmarkCheck: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="m9 10 2 2 4-4"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    map: '<path d="M14.1 5.1 9.9 3 3.6 5.2A1 1 0 0 0 3 6.1v13.3a.7.7 0 0 0 1 .6l5-2 4.1 2.1 6.3-2.2a1 1 0 0 0 .6-.9V3.7a.7.7 0 0 0-1-.6z"/><path d="M9.9 3v15M14.1 5.1V21"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+    locate: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    share: '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4M12 2v13"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    chevron: '<path d="m9 18 6-6-6-6"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
+    navigate: '<path d="m3 11 19-9-9 19-2-8z"/>',
+    external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+    switch: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
+    building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+  };
+  function icon(name, size) {
+    return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+  }
   // Hatching: architectural "shade" drawn in the building's style colour — stands in for a photo.
   function hatchURL(color) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#e4e4e4"/><path d="M-2.5 2.5l5-5M0 10L10 0M7.5 12.5l5-5" stroke="${color}" stroke-width="1.4" stroke-opacity=".6"/></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#efeeea"/><path d="M-2.5 2.5l5-5M0 10L10 0M7.5 12.5l5-5" stroke="${color}" stroke-width="1.2" stroke-opacity=".42"/></svg>`;
     return `url('data:image/svg+xml,${encodeURIComponent(svg)}')`;
   }
   function hatch(color) {
@@ -140,19 +195,77 @@
     if (!photo && o.initials) inner += `<span class="ph-initials">${esc(initials(b.name))}</span>`;
     return `<div class="ph ${photo ? 'photo' : ''} ${o.cls || ''}" style="${bg}${o.style || ''}"${go} aria-label="${esc(b.name)}">${inner}</div>`;
   }
+  const makerLine = b => [b.architect, b.city].filter(Boolean).join(' · ');
+  function likeChips(likes) {
+    return likes && likes.length ? `<div class="chips likes">${likes.map(l => `<span class="chip">${esc(l)}</span>`).join('')}</div>` : '';
+  }
+  // A log's own photos: 1 full width, 2 side by side, 3 = one large + two, 4 = grid.
+  function shotsHTML(photos) {
+    if (!photos || !photos.length) return '';
+    const list = photos.slice(0, MAX_PHOTOS);
+    return `<div class="shots n${list.length}">${list.map(p => `<div class="shot" style="background-image:url('${p}')"></div>`).join('')}</div>`;
+  }
   const phLabel = b => [b.style, b.year].filter(Boolean).join(' · ').toUpperCase();
   const byLine = b => [b.architect, b.year].filter(Boolean).join(' · ');
   function avatar(u, size) {
-    return `<div class="avatar ${size || ''}" data-go="#/u/${u.id}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</div>`;
+    const bg = u.photo ? ` style="background-image:url('${u.photo}');background-size:cover;background-position:center"` : '';
+    return `<div class="avatar ${size || ''}"${bg} data-go="#/u/${u.id}" aria-label="${esc(u.name)}">${u.photo ? '' : esc(initials(u.name))}</div>`;
   }
+  // The logomark: a stepped tower, half solid ink, half in the app's diagonal shade.
+  let logoN = 0;
+  function logoSVG(size) {
+    const n = ++logoN, s = size || 28;
+    const d = 'M6 21V14H8V8H10V3H14V8H16V14H18V21Z';
+    return `<svg class="logo-mark" viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true">
+      <clipPath id="lgShape${n}"><path d="${d}"/></clipPath>
+      <clipPath id="lgRight${n}"><rect x="12" y="0" width="12" height="24"/></clipPath>
+      <g clip-path="url(#lgShape${n})">
+        <rect width="24" height="24" fill="currentColor"/>
+        <g clip-path="url(#lgRight${n})">
+          <rect width="24" height="24" fill="var(--paper, #fff)"/>
+          <g stroke="currentColor" stroke-width="1.1">${[-8, -4, 0, 4, 8, 12, 16, 20, 24, 28].map(o => `<line x1="${o - 12}" y1="24" x2="${o + 12}" y2="0"/>`).join('')}</g>
+        </g>
+      </g>
+      <path d="${d}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter"/>
+    </svg>`;
+  }
+
+  // ---------- Sound ----------
+  const Sound = (() => {
+    let ctx;
+    function ensure() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    function tone(freq, dur, type, vol, delay) {
+      try {
+        const c = ensure();
+        const t0 = c.currentTime + (delay || 0);
+        const osc = c.createOscillator(), gain = c.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq, t0);
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(vol || 0.05, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(gain).connect(c.destination);
+        osc.start(t0); osc.stop(t0 + dur + 0.02);
+      } catch (e) { /* no audio support */ }
+    }
+    return {
+      tap() { tone(520, 0.05, 'square', 0.025); },
+      star() { tone(720, 0.07, 'sine', 0.05); },
+      success() { tone(660, 0.09, 'sine', 0.05); tone(880, 0.13, 'sine', 0.05, 0.09); },
+    };
+  })();
   function nav(active) {
-    const item = (key, href, label) => `<a href="${href}" class="${active === key ? 'on' : ''}"><div class="ic"></div>${label}</a>`;
+    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon(ic)}${label}</a>`;
     return `<nav class="nav">
-      ${item('home', '#/feed', 'Home')}
-      ${item('lists', '#/lists', 'Lists')}
-      <a href="#/log" class="plus" aria-label="Log a building">+</a>
-      ${item('map', '#/map', 'Map')}
-      ${item('you', '#/me', 'You')}
+      ${item('home', '#/feed', 'Home', 'home')}
+      ${item('lists', '#/lists', 'Lists', 'bookmark')}
+      <a href="#/log" class="plus" aria-label="Log a building">${icon('plus')}</a>
+      ${item('map', '#/map', 'Map', 'map')}
+      ${item('you', '#/me', 'You', 'user')}
     </nav>`;
   }
 
@@ -172,7 +285,7 @@
 
   // ---------- UI state ----------
   const root = document.getElementById('app');
-  let mapFilter = 'all', mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
+  let mapKind = 'all', mapFilter = 'all', mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
   let findTab = 'buildings', findQ = '';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -190,9 +303,9 @@
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
     return `<div class="screen"><div class="signin">
-      <div class="mark">THROWING<br>SHADE</div>
+      <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="ph hatch-band" style="${hatch(INK)}"></div>
+      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
@@ -207,43 +320,43 @@
     const mine = v.userId === state.me;
     const mv = myVisit(b.id);
     let action;
-    if (mine) action = `<button class="btn block" data-go="#/log/${b.id}">Edit critique</button>`;
-    else if (mv) action = `<button class="btn block" data-go="#/b/${b.id}">Been · you gave ${mv.stars}★</button>`;
-    else action = `<button class="btn block ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? '✓ On Want to Visit' : '+ Want to Visit'}</button>`;
+    if (mine) action = `<button class="link" data-go="#/log/${b.id}">${icon('edit', 'sm')}Edit</button>`;
+    else if (mv) action = `<button class="link" data-go="#/b/${b.id}">${icon('check', 'sm')}Been · you gave ${mv.stars}★</button>`;
+    else action = `<button class="link ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`;
+    const where = [kindOf(b) !== 'building' && KINDS[kindOf(b)], b.city, ago(v.createdAt)].filter(Boolean).join(' · ');
     return `<div class="card">
       <div class="card-head">
         ${avatar(u)}
-        <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(b.city)} · ${ago(v.createdAt)}</div></div>
-        ${scoreHTML(v.stars)}
+        <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(where)}</div></div>
       </div>
-      ${ph(b, { photo: v.photo, w: 720, style: 'height:180px', label: phLabel(b) })}
-      ${v.note ? `<div class="quote">“${esc(v.note)}”</div>` : ''}
-      <div class="row-flex">${action}<button class="btn" style="width:64px" data-go="#/b/${b.id}">Open</button></div>
+      <div class="rating-line">${starsHTML(v.stars, 'md')}<span class="small muted">${STAR_WORDS[v.stars]}</span></div>
+      ${v.note ? `<div class="quote">${esc(v.note)}</div>` : ''}
+      ${likeChips(v.likes)}
+      ${shotsHTML(v.photos)}
+      <div class="card-actions">${action}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
     </div>`;
   }
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar"><div class="wordmark">THROWING SHADE</div><button class="btn-sq" aria-label="Search" data-go="#/find">Find</button></div>
-      <div class="toggle">
-        <button class="${tab === 'feed' ? 'on' : ''}" data-go="#/feed">Feed</button>
-        <button class="${tab === 'map' ? 'on' : ''}" data-go="#/map">Map</button>
-      </div>`;
+      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}<button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>`;
     if (tab === 'map') {
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
+      const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
-        <div class="pills">${pill('all', 'All')}${pill('been', 'Been')}${pill('want', 'Want to Visit')}${pill('friends', 'Friends’ picks')}</div>
+        <div class="pills">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}<span class="pill-sep"></span>${pill('been', 'Been')}${pill('want', 'Want to Visit')}${pill('friends', 'Friends’ picks')}</div>
         <div class="map-wrap" style="position:relative;flex:1">
           <div id="map"></div>
-          <div class="map-legend" id="legend">
-            <button class="legend-toggle" data-act="legend">Styles ▾</button>
+          <div class="map-legend closed" id="legend">
+            <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles</button>
             <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
-              <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div></div>
+              <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
+              <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
           </div>
-          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">Locate</button>
-          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">Pin</button>
-          <div class="map-hint" id="map-hint" hidden>Tap a building to add it · or long-press</div>
+          <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
+          <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">${icon('pin')}</button>
+          <div class="map-hint" id="map-hint" hidden>Tap a place to add it · or long-press</div>
           <div id="map-card"></div>
         </div>
       </div>${nav('map')}`;
@@ -251,14 +364,14 @@
     const fids = followingIds(state.me);
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
-      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">Find people</button>`;
+      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
     return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
   function buildingRow(b, right) {
     return `<button class="row" data-go="#/b/${b.id}">
       ${ph(b, { style: 'width:38px;height:38px', go: false })}
-      <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.architect)} · ${esc(b.city)}</div></div>
+      <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(makerLine(b))}</div></div>
       ${right || ''}
     </button>`;
   }
@@ -281,18 +394,18 @@
       list = nearest(BUILDINGS).slice(0, 15);
       return `<div class="caps">Nearby · ${locNote()}</div>` + list.map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
     }
-    list = BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology].join(' ').toLowerCase().includes(q));
-    if (!list.length) return `<div class="empty">No buildings match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">Drop a pin to add it</button>`;
+    list = BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q));
+    if (!list.length) return `<div class="empty">No places match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">${icon('pin', 'sm')}Drop a pin to add it</button>`;
     return nearest(list).map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
   }
 
   function viewFind(qs) {
     if (qs === 'people') findTab = 'people';
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button><div class="h1 grow">Find</div></div>
-      <div class="pad"><input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, architects, cities, people" autocomplete="off" autocapitalize="none"></div>
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Find</div></div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, bridges, art, people" autocomplete="off" autocapitalize="none"></div>
       <div class="tabs" style="margin:8px 16px 12px">
-        <button class="${findTab === 'buildings' ? 'on' : ''}" data-act="findtab" data-k="buildings">Buildings</button>
+        <button class="${findTab === 'buildings' ? 'on' : ''}" data-act="findtab" data-k="buildings">Places</button>
         <button class="${findTab === 'people' ? 'on' : ''}" data-act="findtab" data-k="people">People</button>
       </div>
       <div id="results" class="stack-6 pad">${findResults()}</div>
@@ -316,10 +429,10 @@
           ${ph(b, { style: 'width:38px;height:38px', go: false })}
           <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)}${loved ? ` · ${loved} friend${loved > 1 ? 's' : ''} loved it` : ''}</div></div>
           ${a.avg ? `<b>${a.avg.toFixed(1)}</b>` : ''}
-          <button class="btn-sq thin" style="width:36px;height:36px;font-size:13px" data-act="unwant" data-id="${b.id}" aria-label="Remove">✕</button>
+          <button class="btn-sq thin" style="width:34px;height:34px" data-act="unwant" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>
         </div>`;
       }).join('') : `<div class="empty">Nothing saved yet.<br>Tap “+ Want to Visit” on a friend’s log.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/find">+ Find buildings</button>`;
+      body += `<button class="btn dashed" style="height:56px" data-go="#/find">${icon('search', 'sm')}Find places</button>`;
     } else {
       const vs = visitsBy(state.me).slice().sort(listSort === 'top' ? (a, b) => b.stars - a.stars || b.createdAt - a.createdAt : (a, b) => b.createdAt - a.createdAt);
       const pill = (k, l) => `<button class="pill ${listSort === k ? 'on' : ''}" data-act="sort" data-k="${k}">${l}</button>`;
@@ -333,7 +446,7 @@
           ${starsHTML(v.stars)}
         </button>`;
       }).join('') : `<div class="empty">You haven’t logged anything yet.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/log">+ Log a building</button>`;
+      body += `<button class="btn dashed" style="height:56px" data-go="#/log">${icon('plus', 'sm')}Log a place</button>`;
     }
     return `<div class="screen with-nav">
       <div class="topbar"><div class="h1">Lists</div></div>
@@ -348,12 +461,15 @@
     const fids = followingIds(state.me);
     const vs = visitsFor(b.id).sort((x, y) =>
       (y.userId === state.me) - (x.userId === state.me) || fids.has(y.userId) - fids.has(x.userId) || y.createdAt - x.createdAt);
-    const photos = vs.filter(v => v.photo);
+    const photos = vs.flatMap(v => v.photos);
+    const likeCounts = {};
+    vs.forEach(v => v.likes.forEach(l => { likeCounts[l] = (likeCounts[l] || 0) + 1; }));
+    const liked = Object.entries(likeCounts).sort((x, y) => y[1] - x[1]);
     const want = isWant(state.me, b.id);
     let tabBody;
     if (bTab === 'photos') {
       tabBody = photos.length
-        ? `<div class="photo-grid">${photos.map(v => `<div class="ph photo" style="background-image:url('${v.photo}');background-size:cover;background-position:center"></div>`).join('')}</div>`
+        ? `<div class="photo-grid">${photos.map(p => `<div class="ph photo" style="background-image:url('${p}');background-size:cover;background-position:center"></div>`).join('')}</div>`
         : `<div class="empty">No photos yet. Log a visit to add the first.</div>`;
     } else {
       tabBody = vs.length ? vs.map(v => {
@@ -363,8 +479,9 @@
           <div class="grow" style="line-height:1.4">
             <b data-go="#/u/${u.id}">${v.userId === state.me ? 'You' : esc(u.handle)}</b> · ${starsHTML(v.stars)}
             <span class="small muted"> · ${fmtDate(v.visitedOn)}</span>
-            ${v.note ? `<div>“${esc(v.note)}”</div>` : ''}
-            ${v.photo ? `<div class="ph photo" style="margin-top:6px;width:120px;height:90px;background-image:url('${v.photo}');background-size:cover;background-position:center"></div>` : ''}
+            ${v.note ? `<div>${esc(v.note)}</div>` : ''}
+            ${likeChips(v.likes)}
+            ${shotsHTML(v.photos)}
           </div></div>`;
       }).join('') : `<div class="empty">No critiques yet. Be the first to throw shade.</div>`;
     }
@@ -375,21 +492,21 @@
       : heroIsCommons ? `<div class="credit"><a href="${esc(commonsURL(b.image, 1200))}" target="_blank" rel="noopener">Photo: Wikimedia Commons</a></div>` : '';
     const q = encodeURIComponent(b.name + (b.city ? ' ' + b.city : ''));
     const links = [
-      b.wiki && `<a class="chip" href="${esc(b.wiki)}" target="_blank" rel="noopener">Wikipedia ↗</a>`,
-      b.osm && `<a class="chip" href="https://www.openstreetmap.org/${esc(b.osm)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`,
-      `<a class="chip dashed" href="https://www.archdaily.com/search/all?q=${encodeURIComponent(b.name)}" target="_blank" rel="noopener">ArchDaily ↗</a>`,
-      `<a class="chip dashed" href="https://www.dezeen.com/?s=${q}" target="_blank" rel="noopener">Dezeen ↗</a>`,
+      b.wiki && `<a class="chip" href="${esc(b.wiki)}" target="_blank" rel="noopener">Wikipedia${icon('external', 'sm')}</a>`,
+      b.osm && `<a class="chip" href="https://www.openstreetmap.org/${esc(b.osm)}" target="_blank" rel="noopener">OpenStreetMap${icon('external', 'sm')}</a>`,
+      `<a class="chip dashed" href="https://www.archdaily.com/search/all?q=${encodeURIComponent(b.name)}" target="_blank" rel="noopener">ArchDaily${icon('external', 'sm')}</a>`,
+      `<a class="chip dashed" href="https://www.dezeen.com/?s=${q}" target="_blank" rel="noopener">Dezeen${icon('external', 'sm')}</a>`,
     ].filter(Boolean).join('');
     const adder = b.addedBy && user(b.addedBy);
     return `<div class="screen">
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
-        <button class="btn-sq arrow left" data-act="back" aria-label="Back">←</button>
-        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">Share</button>` })}
+        <button class="btn-sq left" data-act="back" aria-label="Back">${icon('back')}</button>
+        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">${icon('share')}</button>` })}
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
-        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
+        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -397,10 +514,11 @@
                  : `<div class="val">Not yet</div><div class="tiny muted">Log a visit to rate</div>`}
           </div>
         </div>
+        ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
         <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
         <div class="row-flex">
-          ${mv ? '' : `<button class="btn block ${want ? 'on' : ''}" style="font-size:14px" data-act="want" data-id="${b.id}">${want ? '✓ Want to Visit' : '+ Want to Visit'}</button>`}
-          <a class="btn block" style="font-size:14px" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">Directions</a>
+          ${mv ? '' : `<button class="btn block ${want ? 'on' : ''}" data-act="want" data-id="${b.id}">${want ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`}
+          <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
         <div class="about">
           <div class="bold">About</div>
@@ -443,6 +561,10 @@
     const bars = Object.entries(styleCounts).sort((a, b) => b[1] - a[1]).map(([s, n]) =>
       `<div style="display:flex;align-items:center;gap:10px"><div class="small" style="width:108px">${esc(s)}</div><div class="bar"><div style="width:${Math.round(n / maxC * 100)}%"></div></div><div class="small" style="width:18px;text-align:right">${n}</div></div>`).join('');
 
+    const looks = {};
+    vs.forEach(v => v.likes.forEach(l => { looks[l] = (looks[l] || 0) + 1; }));
+    const looksChips = Object.entries(looks).sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('');
     const recent = visitsBy(uid).sort((a, b) => b.createdAt - a.createdAt).map(v => {
       const b = BY_ID[v.buildingId]; if (!b) return '';
       return `<button class="row" data-go="#/b/${b.id}">
@@ -454,30 +576,64 @@
 
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
-      ${own ? '' : `<div class="topbar" style="padding-bottom:0"><button class="btn-sq thin arrow" data-act="back" aria-label="Back">←</button></div>`}
-      <div style="display:flex;gap:14px;align-items:center;padding:16px">
-        ${avatar(u, 'lg').replace('data-go', 'data-x')}
-        <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : ''}</div>
+      <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="grow"></div>`}
+        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}</div>
+      <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
+        ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
+          <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
+          : avatar(u, 'lg').replace('data-go', 'data-x')}
+        <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
       </div>
-      <div class="stat-table" style="margin:0 16px">
+      <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
-        <div><b>${followerCount(uid)}</b><div class="tiny muted">Followers</div></div>
-        <div><b>${followingIds(uid).size}</b><div class="tiny muted">Following</div></div>
+        <div data-go="#/followers/${uid}"><b>${followerCount(uid)}</b><div class="tiny muted">Followers</div></div>
+        <div data-go="#/following/${uid}"><b>${followingIds(uid).size}</b><div class="tiny muted">Following</div></div>
       </div>
-      ${own ? '' : `<div class="pad" style="margin-top:12px">${following
-        ? `<button class="btn" style="width:100%;height:48px;font-size:14px;font-weight:600" data-act="follow" data-id="${uid}">Following</button>`
+      ${own ? '' : `<div class="pad" style="margin-top:14px">${following
+        ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
       <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
-        <div><div class="bold" style="margin-bottom:8px">Top 4</div><div class="top4">${top}${topFill}</div></div>
-        <div><div style="display:flex;justify-content:space-between;margin-bottom:8px"><b>Tier list</b><span class="small muted">Avg ${avg}★</span></div>
+        <div class="section"><div class="section-title">Top 4</div><div class="top4">${top}${topFill}</div></div>
+        <div class="section"><div class="section-title">Tier list<span class="small muted" style="font-weight:500">Avg ${avg}★</span></div>
           <div class="stack-6">${tiers || '<div class="empty">No ratings yet.</div>'}</div></div>
-        ${bars ? `<div><div class="bold" style="margin-bottom:8px">By style</div><div class="stack-6" style="gap:8px">${bars}</div></div>` : ''}
-        <div><div class="bold" style="margin-bottom:8px">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
-        ${own ? `<div class="row-flex"><button class="btn block" data-act="switch">Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${resetArmed ? 'Tap again to reset' : 'Reset demo data'}</button></div>` : ''}
+        ${looksChips ? `<div class="section"><div class="section-title">Looks for</div><div class="chips">${looksChips}</div></div>` : ''}
+        ${bars ? `<div class="section"><div class="section-title">By style</div><div class="stack-6" style="gap:10px">${bars}</div></div>` : ''}
+        <div><div class="section-title" style="padding:0 2px">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+        ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
     </div>${nav(own ? 'you' : '')}`;
+  }
+
+  function viewFollowList(uid, kind) {
+    const u = user(uid);
+    if (!u) return viewNotFound();
+    const ids = kind === 'followers' ? state.follows.filter(f => f[1] === uid).map(f => f[0]) : Array.from(followingIds(uid));
+    const people = ids.map(user).filter(Boolean);
+    const rows = people.length ? people.map(p => {
+      const f = isFollowing(state.me, p.id);
+      return `<div class="row" data-go="#/u/${p.id}">
+        ${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><div class="sub">@${esc(p.handle)} · ${visitsBy(p.id).length} logged</div></div>
+        ${p.id === state.me ? '' : `<button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${p.id}">${f ? 'Following' : 'Follow'}</button>`}
+      </div>`;
+    }).join('') : `<div class="empty">${kind === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">${kind === 'followers' ? 'Followers' : 'Following'}</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewEditProfile() {
+    const u = me();
+    return sheet('Edit profile', 1, 1,
+      `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
+      `<div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
+       <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
+       <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
+         <div class="counter" id="ep-bio-count">${(u.bio || '').length} / 140</div></div>
+       <div class="sheet-foot"><button class="btn-primary" data-act="saveprofile">Save</button></div>`);
   }
 
   function sheet(title, step, total, left, body) {
@@ -492,23 +648,23 @@
 
   function logResults(q) {
     q = (q || '').trim().toLowerCase();
-    const list = q ? BUILDINGS.filter(b => [b.name, b.architect, b.city, b.style].join(' ').toLowerCase().includes(q)) : BUILDINGS;
+    const list = q ? BUILDINGS.filter(b => [b.name, b.architect, b.city, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q)) : BUILDINGS;
     const rows = nearest(list).slice(0, q ? 40 : 12).map(x => {
       const mv = myVisit(x.b.id);
       return `<button class="row" data-go="#/log/${x.b.id}">
         ${ph(x.b, { style: 'width:38px;height:38px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.b.architect)} · ${esc(x.b.city)}</div></div>
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
         <span class="small ${mv ? '' : 'muted'}">${mv ? `Your ${mv.stars}★` : fmtKm(x.d)}</span>
       </button>`;
     }).join('');
-    return (q ? '' : `<div class="caps">Nearby · ${locNote()}</div>`) + (rows || `<div class="empty">No buildings match “${esc(q)}”.</div>`);
+    return (q ? '' : `<div class="caps">Nearby · ${locNote()}</div>`) + (rows || `<div class="empty">No places match “${esc(q)}”.</div>`);
   }
 
   function viewLogPick() {
     return sheet('Throw Shade', 1, 2,
-      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">✕</button>`,
-      `<input class="input" data-input="logq" placeholder="Search a building, architect or city" autocomplete="off">
-       <button class="btn dashed" style="height:48px" data-act="pinfrommap">Not listed? Drop a pin on the map</button>
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
+      `<div class="input-wrap">${icon('search')}<input class="input" data-input="logq" placeholder="Search buildings, bridges, art, spots" autocomplete="off"></div>
+       <button class="btn dashed" style="height:48px" data-act="pinfrommap">${icon('pin', 'sm')}Not listed? Drop a pin on the map</button>
        <div id="logresults" class="stack-6">${logResults('')}</div>`);
   }
 
@@ -517,38 +673,41 @@
     if (!b) return viewNotFound();
     if (!draft || draft.bid !== bid) {
       const mv = myVisit(bid);
-      draft = mv ? { bid, stars: mv.stars, note: mv.note || '', date: mv.visitedOn, photo: mv.photo } : { bid, stars: 0, note: '', date: isoDate(Date.now()), photo: null };
+      draft = mv
+        ? { bid, stars: mv.stars, note: mv.note || '', date: mv.visitedOn, photos: mv.photos.slice(), likes: mv.likes.slice() }
+        : { bid, stars: 0, note: '', date: isoDate(Date.now()), photos: [], likes: [] };
     }
-    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('#fff', '#fff') : starSVG('none', INK)}</button>`).join('');
+    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6')}</button>`).join('');
     const editing = !!myVisit(bid);
     return sheet('Your critique', 2, 2,
-      `<button class="btn-sq thin" data-go="#/log" aria-label="Back">←</button>`,
-      `<div style="display:flex;gap:12px;align-items:center;border:1.5px solid var(--line);border-radius:6px;padding:10px">
+      `<button class="btn-sq thin" data-go="#/log" aria-label="Back">${icon('back')}</button>`,
+      `<div class="banner" style="display:flex;gap:12px;align-items:center;padding:10px">
          ${ph(b, { style: 'width:56px;height:56px', go: false })}
          <div style="line-height:1.3"><b style="font-size:16px">${esc(b.name)}</b><div class="small muted">${esc(byLine(b))}</div></div>
        </div>
        <div class="field"><div class="label">Your rating</div><div class="star-input" id="star-input">${starBtns}</div>
          <div class="star-caption" id="star-caption">${STAR_WORDS[draft.stars] || '<span class="muted" style="font-weight:400;font-size:14px">Tap to rate</span>'}</div></div>
+       <div class="field"><div class="label">What stood out? <span class="muted" style="font-weight:400">tap all that apply</span></div>
+         <div class="chips aspects">${ASPECTS.map(a => `<button class="pill ${draft.likes.includes(a) ? 'on' : ''}" data-act="aspect" data-k="${a}">${a}</button>`).join('')}</div></div>
        <div class="field"><label for="visitdate">Date visited</label><input id="visitdate" class="input" type="date" data-input="date" value="${draft.date}" max="${isoDate(Date.now())}"></div>
-       <div class="field"><div class="label">Photo <span class="muted" style="font-weight:400">(optional)</span></div>
-         <div style="display:flex;gap:10px">
-           <label class="photo-add" for="photo-in" aria-label="Add photo">+</label>
-           ${draft.photo ? `<div class="ph photo" style="width:80px;height:80px;background-image:url('${draft.photo}');background-size:cover;background-position:center">
-              <button class="btn-sq thin" style="position:absolute;right:2px;top:2px;width:26px;height:26px;font-size:11px" data-act="rmphoto" aria-label="Remove photo">✕</button></div>`
-             : `<div class="ph" style="width:80px;height:80px"></div>`}
+       <div class="field"><div class="label">Photos <span class="muted" style="font-weight:400">optional · up to ${MAX_PHOTOS}</span></div>
+         <div class="photo-row">
+           ${draft.photos.map((p, i) => `<div class="ph photo" style="width:72px;height:72px;background-image:url('${p}');background-size:cover;background-position:center">
+              <button class="btn-sq rm" data-act="rmphoto" data-i="${i}" aria-label="Remove photo">${icon('x', 'sm')}</button></div>`).join('')}
+           ${draft.photos.length < MAX_PHOTOS ? `<label class="photo-add" for="photo-in" aria-label="Add photos">${icon('camera', 'lg')}</label>` : ''}
          </div>
-         <input id="photo-in" type="file" accept="image/*" hidden data-change="photo"></div>
+         <input id="photo-in" type="file" accept="image/*" multiple hidden data-change="photo"></div>
        <div class="field"><label for="critique">Quick critique</label>
          <textarea id="critique" class="input" maxlength="280" data-input="note" placeholder="Say something sharp…">${esc(draft.note)}</textarea>
          <div class="counter" id="note-count">${draft.note.length} / 280</div></div>
        <div class="sheet-foot stack-6">
          <button class="btn-primary" data-act="post">${editing ? 'Update critique' : 'Post critique'}</button>
-         ${editing ? `<button class="btn block ${delArmed ? 'on' : ''}" data-act="delvisit" data-id="${bid}">${delArmed ? 'Tap again to delete' : 'Delete critique'}</button>` : ''}
+         ${editing ? `<button class="btn block danger ${delArmed ? 'on' : ''}" data-act="delvisit" data-id="${bid}">${delArmed ? 'Tap again to delete' : 'Delete critique'}</button>` : ''}
        </div>`);
   }
 
   function viewNotFound() {
-    return `<div class="screen with-nav"><div class="topbar"><button class="btn-sq thin arrow" data-act="back">←</button></div>
+    return `<div class="screen with-nav"><div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button></div>
       <div class="pad"><div class="empty">That page doesn’t exist.</div></div></div>${nav('')}`;
   }
 
@@ -581,11 +740,12 @@
     if (mapFilter === 'been') list = list.filter(b => been.has(b.id));
     if (mapFilter === 'want') list = list.filter(b => want.has(b.id));
     if (mapFilter === 'friends') list = list.filter(b => friends.has(b.id));
+    if (mapKind !== 'all') list = list.filter(b => kindOf(b) === mapKind);
     return list.map(b => ({ b, kind: mapFilter === 'friends' && kind(b) === 'other' ? 'been' : kind(b) }));
   }
   function pinIcon(b, kind) {
     const cls = kind === 'been' ? '' : kind;
-    return window.L.divIcon({ className: '', html: `<div class="pin ${cls} ${mapSel === b.id ? 'sel' : ''}" style="--c:${styleColor(b)}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+    return window.L.divIcon({ className: '', html: `<div class="pin k-${kindOf(b)} ${cls} ${mapSel === b.id ? 'sel' : ''}" style="--c:${styleColor(b)}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
   }
   function renderMapCard() {
     const el = document.getElementById('map-card');
@@ -597,7 +757,7 @@
       ${ph(b, { w: 160, style: 'width:64px;height:64px', go: false })}
       <div class="grow" style="line-height:1.3"><b>${esc(b.name)}</b><div class="small muted">${esc(byLine(b))}</div>
         <div class="small">${esc(b.city)} · ${fmtKm(km(loc, b))}${mv ? ` · you: ${mv.stars}★` : ''}</div></div>
-      <div style="font-size:20px">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:20px"') : '<span class="small muted">No logs</span>'}</div>
+      <div style="font-size:20px">${a.avg ? scoreHTML(a.avg.toFixed(1)) : '<span class="small muted">No logs</span>'}</div>
     </button>`;
   }
   function initMap() {
@@ -640,7 +800,7 @@
   // Nominatim's nearest address if both fail, results cached per ~10 m, and "Name it yourself" always works.
   const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
   const lookups = {};
-  let nameStyle = null, pendingPinMode = false;
+  let nameStyle = null, nameKind = 'building', pendingPinMode = false;
 
   function fetchJSON(url, opts, ms) {
     const ctl = new AbortController();
@@ -699,7 +859,7 @@
         hourly: 'temperature_2m,weather_code',
         daily: 'weather_code,temperature_2m_max,sunset', temperature_unit: 'fahrenheit', timezone: 'auto', forecast_days: 5,
       }), null, 8000);
-      weatherCache[key] = { loading: false, current: d.current, daily: d.daily, hourly: d.hourly };
+      weatherCache[key] = { loading: false, current: d.current, daily: d.daily, hourly: d.hourly, tz: d.timezone };
     } catch (e) {
       weatherCache[key] = { loading: false, error: true };
     }
@@ -813,8 +973,12 @@
   }
 
   async function overpass(lat, lng) {
-    const q = `[out:json][timeout:10];(way(around:25,${lat},${lng})[building];relation(around:25,${lat},${lng})[building];` +
-      `way(around:90,${lat},${lng})[building][name];relation(around:90,${lat},${lng})[building][name];);out tags center 25;`;
+    const A = (r) => `(around:${r},${lat},${lng})`;
+    const q = `[out:json][timeout:10];(way${A(25)}[building];relation${A(25)}[building];` +
+      `way${A(90)}[building][name];relation${A(90)}[building][name];` +
+      `nwr${A(70)}[tourism=artwork];way${A(70)}[man_made=bridge];way${A(50)}["bridge:name"];` +
+      `nwr${A(120)}[name][leisure~"^(park|garden)$"];nwr${A(90)}[name][place=square];nwr${A(90)}[name][amenity=fountain];` +
+      `nwr${A(90)}[name][tourism~"^(attraction|viewpoint)$"];nwr${A(90)}[name][man_made=pier];);out tags center 30;`;
     let lastErr;
     for (const ep of OVERPASS) {
       try {
@@ -837,7 +1001,21 @@
     industrial: 'Industrial building', warehouse: 'Warehouse', parking: 'Parking garage', hospital: 'Hospital',
   };
   const AMENITY_WORDS = { theatre: 'Theatre', library: 'Library', place_of_worship: 'Place of worship', arts_centre: 'Arts centre', university: 'University building', townhall: 'Town hall', cinema: 'Cinema' };
+  // What kind of place an OSM element is: art > bridge > building > spot.
+  function osmKind(t) {
+    if (t.tourism === 'artwork') return 'art';
+    if (t.man_made === 'bridge' || t['bridge:name']) return 'bridge';
+    if (t.building) return 'building';
+    if (t.leisure || t.place === 'square' || t.amenity === 'fountain' || t.tourism || t.man_made === 'pier') return 'spot';
+    return 'building';
+  }
+  const SPOT_WORDS = { park: 'Park', garden: 'Garden', square: 'Square', fountain: 'Fountain', attraction: 'Attraction', viewpoint: 'Viewpoint', pier: 'Pier' };
+  const cap = w => w ? w[0].toUpperCase() + w.slice(1) : w;
   function typeLabel(t) {
+    const k = osmKind(t);
+    if (k === 'art') return t.artwork_type ? cap(t.artwork_type.replace(/_/g, ' ')) : 'Public art';
+    if (k === 'bridge') return t['bridge:movable'] ? cap(t['bridge:movable']) + ' bridge' : t['bridge:structure'] ? cap(t['bridge:structure'].replace(/_/g, ' ')) + ' bridge' : 'Bridge';
+    if (k === 'spot') return SPOT_WORDS[t.leisure] || SPOT_WORDS[t.place] || SPOT_WORDS[t.amenity] || SPOT_WORDS[t.tourism] || SPOT_WORDS[t.man_made] || 'Place';
     if (t.tourism === 'museum') return 'Museum';
     if (AMENITY_WORDS[t.amenity]) return AMENITY_WORDS[t.amenity];
     if (+t['building:levels'] >= 40) return 'Skyscraper';
@@ -870,9 +1048,9 @@
   function candidate(osm, tags, clat, clng, plat, plng) {
     const year = yearFrom(tags.start_date || tags['building:start_date'] || tags['construction:date']);
     return {
-      osm, tags, lat: clat, lng: clng, year,
+      osm, tags, lat: clat, lng: clng, year, kind: osmKind(tags),
       d: Math.round(km({ lat: plat, lng: plng }, { lat: clat, lng: clng }) * 1000),
-      name: tags.name || '', addr: addrOf(tags), typ: typeLabel(tags),
+      name: tags.name || tags['bridge:name'] || '', addr: addrOf(tags), typ: typeLabel(tags),
       style: styleFrom(tags['building:architecture'] || tags.architecture, year),
       wiki: !!(tags.wikidata || tags.wikipedia),
     };
@@ -957,16 +1135,17 @@
     const pills = Object.entries(STYLES).map(([s, c]) =>
       `<button class="pill ${nameStyle === s ? 'on' : ''}" data-act="pickstyle" data-k="${s}"><span class="dot" style="background:${c}"></span> ${s}</button>`).join('');
     return sheet('What’s here?', 1, 2,
-      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">✕</button>`,
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
       `<div id="pinmap" class="pin-map"></div>
        <div class="caps">Pin · ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
-       ${near.length ? `<div class="stack-6"><div class="caps">Already on Throwing Shade</div>${nearRows}</div>` : ''}
+       ${near.length ? `<div class="stack-6"><div class="caps">Already on throwShade</div>${nearRows}</div>` : ''}
        <div class="stack-6"><div class="caps">From OpenStreetMap</div><div id="osm-results" class="stack-6">${osmResultsHTML(key)}</div></div>
-       <button class="btn dashed" style="height:56px" data-act="nameit">+ Name it yourself</button>
+       <button class="btn dashed" style="height:52px" data-act="nameit">${icon('edit', 'sm')}Name it yourself</button>
        <div id="nameit" class="stack" hidden>
-         <div class="field"><label for="nb-name">Building name</label><input id="nb-name" class="input" autocomplete="off" placeholder="${esc((lookups[key] && lookups[key].address) || 'e.g. The corner pavilion')}"></div>
+         <div class="seg">${Object.entries(KINDS).map(([k, l]) => `<button class="${nameKind === k ? 'on' : ''}" data-act="pickkind" data-k="${k}">${l}</button>`).join('')}</div>
+         <div class="field"><label for="nb-name">Name</label><input id="nb-name" class="input" autocomplete="off" placeholder="${esc((lookups[key] && lookups[key].address) || 'e.g. The corner pavilion')}"></div>
          <div class="row-flex">
-           <div class="field grow"><label for="nb-arch">Architect <span class="muted" style="font-weight:400">(optional)</span></label><input id="nb-arch" class="input" autocomplete="off"></div>
+           <div class="field grow"><label for="nb-arch">Architect or artist <span class="muted" style="font-weight:400">(optional)</span></label><input id="nb-arch" class="input" autocomplete="off"></div>
            <div class="field" style="width:104px"><label for="nb-year">Year</label><input id="nb-year" class="input" inputmode="numeric" maxlength="4" autocomplete="off"></div>
          </div>
          <div class="field"><div class="label">Style</div><div class="chips">${pills}</div></div>
@@ -1054,6 +1233,26 @@
     reader.readAsDataURL(file);
   }
 
+  // ---------- Confetti ----------
+  function celebrate() {
+    const old = root.querySelector('.confetti'); if (old) old.remove();
+    const host = document.createElement('div');
+    host.className = 'confetti';
+    const colors = Object.values(STYLES);
+    for (let i = 0; i < 16; i++) {
+      const bit = document.createElement('span');
+      bit.style.setProperty('--dx', (Math.random() * 220 - 110) + 'px');
+      bit.style.setProperty('--dy', (Math.random() * -180 - 30) + 'px');
+      bit.style.setProperty('--rot', (Math.random() * 360) + 'deg');
+      bit.style.background = colors[i % colors.length];
+      bit.style.left = (35 + Math.random() * 30) + '%';
+      bit.style.animationDelay = (Math.random() * 0.1) + 's';
+      host.appendChild(bit);
+    }
+    root.appendChild(host);
+    setTimeout(() => host.remove(), 950);
+  }
+
   // ---------- Toast ----------
   let toastTimer;
   function toast(msg) {
@@ -1072,7 +1271,7 @@
     const cur = currentPath();
     for (let i = trail.length - 1; i >= 0; i--) {
       const p = trail[i];
-      if (p !== cur && !p.startsWith('/log') && !p.startsWith('/pin') && !p.startsWith('/signin')) { trail.length = i; go('#' + p); return; }
+      if (p !== cur && !p.startsWith('/log') && !p.startsWith('/pin') && !p.startsWith('/editprofile') && !p.startsWith('/signin')) { trail.length = i; go('#' + p); return; }
     }
     go('#/feed');
   }
@@ -1100,6 +1299,9 @@
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); break;
       case 'u': html = viewProfile(seg[1]); break;
+      case 'followers': html = viewFollowList(seg[1], 'followers'); break;
+      case 'following': html = viewFollowList(seg[1], 'following'); break;
+      case 'editprofile': html = viewEditProfile(); break;
       case 'log': html = seg[1] ? viewLogRate(seg[1]) : viewLogPick(); break;
       case 'pin': {
         const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(seg[1] || '');
@@ -1131,9 +1333,11 @@
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.me = id; save();
-      go('#/feed'); toast('Welcome, @' + handle);
+      Sound.success();
+      go('#/feed');
+      setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
-    login(d) { state.me = d.id; save(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    login(d) { state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -1146,6 +1350,7 @@
     back,
     want(d) {
       const i = state.want.findIndex(w => w.userId === state.me && w.buildingId === d.id);
+      Sound.tap();
       if (i >= 0) { state.want.splice(i, 1); toast('Removed from Want to Visit'); }
       else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); toast('Saved to Want to Visit'); }
       save(); render();
@@ -1160,7 +1365,9 @@
     findtab(d) { findTab = d.k; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
-    mapfilter(d) { mapFilter = d.k; mapSel = null; render(); },
+    // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
+    mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
+    mapkind(d) { mapKind = d.k; mapSel = null; render(); },
     legend() { document.getElementById('legend').classList.toggle('closed'); },
     locate() {
       requestLocation(ok => {
@@ -1170,26 +1377,40 @@
     },
     share(d) {
       const b = BY_ID[d.id], mv = myVisit(d.id);
-      const text = mv ? `I gave ${b.name} ${mv.stars}★ on Throwing Shade` : `${b.name} by ${b.architect} — on Throwing Shade`;
+      const text = mv ? `I gave ${b.name} ${mv.stars}★ on throwShade` : `${b.name} by ${b.architect} — on throwShade`;
       if (navigator.share) navigator.share({ title: b.name, text }).catch(() => {});
       else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'), () => toast(text));
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    closeedit() { back(); },
+    saveprofile() {
+      const u = me();
+      const name = document.getElementById('ep-name').value.trim();
+      const handle = document.getElementById('ep-handle').value.trim().toLowerCase().replace(/^@/, '');
+      const bio = document.getElementById('ep-bio').value.trim();
+      if (!name) return toast('Add a display name');
+      if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
+      if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
+      u.name = name; u.handle = handle; u.bio = bio;
+      save(); Sound.success();
+      back(); toast('Profile updated');
+    },
     droppin() {
       setPinMode(!pinMode);
     },
-    pinfrommap() { pendingPinMode = true; mapFilter = 'all'; go('#/map'); },
+    pinfrommap() { pendingPinMode = true; mapFilter = 'all'; mapKind = 'all'; go('#/map'); },
     pickosm(d) {
       const L0 = lookups[d.key], r = L0 && L0.results[+d.i];
       if (!r) return;
       const existing = BUILDINGS.find(b => b.osm === r.osm) ||
         (r.tags.wikidata && BUILDINGS.find(b => b.qid === r.tags.wikidata)) ||
         (r.name && BUILDINGS.find(b => km(b, r) < 0.08 && sameName(b.name, r.name)));
-      if (existing) { toast(existing.name + ' is already on Throwing Shade'); go('#/log/' + existing.id); return; }
+      if (existing) { toast(existing.name + ' is already on throwShade'); go('#/log/' + existing.id); return; }
       const b = {
-        id: 'osm-' + r.osm.replace('/', '-'), name: r.name || r.addr || (L0.address ? 'Building at ' + L0.address : 'Unnamed building'),
-        architect: r.tags.architect || '', year: r.year, typology: r.typ, style: r.style,
+        id: 'osm-' + r.osm.replace('/', '-'), kind: r.kind,
+        name: r.name || r.addr || (L0.address ? KINDS[r.kind] + ' at ' + L0.address : 'Unnamed ' + KINDS[r.kind].toLowerCase()),
+        architect: r.tags.architect || r.tags.artist_name || r.tags.artist || '', year: r.year, typology: r.typ, style: r.style,
         city: r.tags['addr:city'] || L0.city || '', country: L0.country || '',
         lat: +r.lat.toFixed(6), lng: +r.lng.toFixed(6), osm: r.osm, address: r.addr || L0.address || '',
         qid: r.tags.wikidata || undefined, wikiTag: r.tags.wikipedia || undefined,
@@ -1211,29 +1432,35 @@
       const p = currentPin(); if (!p) return;
       const name = document.getElementById('nb-name').value.trim();
       const year = parseInt(document.getElementById('nb-year').value, 10);
-      if (!name) return toast('Give the building a name');
+      if (!name) return toast('Give it a name');
       const L0 = lookups[pinKey(p.lat, p.lng)] || {};
       addPlace({
-        id: 'pin-' + Date.now().toString(36), name, architect: document.getElementById('nb-arch').value.trim(),
-        year: year > 0 && year <= new Date().getFullYear() + 5 ? year : '', typology: 'Building',
+        id: 'pin-' + Date.now().toString(36), kind: nameKind, name, architect: document.getElementById('nb-arch').value.trim(),
+        year: year > 0 && year <= new Date().getFullYear() + 5 ? year : '', typology: KINDS[nameKind],
         style: nameStyle || styleFrom('', year > 0 ? year : ''), city: L0.city || '', country: L0.country || '',
         lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6), address: L0.address || '',
         source: 'user', addedBy: state.me, createdAt: Date.now(),
       });
-      nameStyle = null;
+      nameStyle = null; nameKind = 'building';
+    },
+    pickkind(d) {
+      nameKind = d.k;
+      document.querySelectorAll('[data-act=pickkind]').forEach(btn => btn.classList.toggle('on', btn.dataset.k === nameKind));
     },
     star(d) {
+      Sound.star();
       draft.stars = +d.n;
       document.querySelectorAll('#star-input button').forEach((btn, i) => {
         const on = i < draft.stars;
         btn.classList.toggle('on', on);
-        btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', INK);
+        btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6');
+        if (on) { btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
     visitexpand(d) { visitExpanded[d.id] = !visitExpanded[d.id]; render(); },
     visitday(d) { visitDaySel[d.id] = +d.i; delete visitSliderPos[d.id]; render(); },
-    rmphoto() { draft.photo = null; render(); },
+    rmphoto(d) { draft.photos.splice(+d.i, 1); render(); },
     delvisit(d) {
       if (!delArmed) { delArmed = true; render(); return; }
       delArmed = false;
@@ -1244,31 +1471,38 @@
       location.replace('#/b/' + d.id);
       setTimeout(() => toast('Critique deleted'), 30);
     },
+    aspect(d, el) {
+      const i = draft.likes.indexOf(d.k);
+      if (i >= 0) draft.likes.splice(i, 1); else draft.likes.push(d.k);
+      el.classList.toggle('on', i < 0);
+    },
     post() {
       if (!draft || !draft.stars) return toast('Pick a star rating first');
       const b = BY_ID[draft.bid];
       const existing = myVisit(draft.bid);
       const snapshot = JSON.stringify(state);
-      if (existing) Object.assign(existing, { stars: draft.stars, note: draft.note.trim(), visitedOn: draft.date, photo: draft.photo, createdAt: Date.now() });
-      else state.visits.push({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, stars: draft.stars, note: draft.note.trim(), photo: draft.photo, visitedOn: draft.date, createdAt: Date.now() });
+      const fields = { stars: draft.stars, note: draft.note.trim(), likes: draft.likes.slice(), visitedOn: draft.date, createdAt: Date.now() };
+      if (existing) Object.assign(existing, fields, { photos: draft.photos.slice() });
+      else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: draft.photos.slice() }, fields));
       state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === draft.bid));
       let msg = `Logged ${b.name} · ${draft.stars}★`;
       if (!save()) {
-        // Storage full (photos are big): keep the log, drop the photo.
+        // Storage full (photos are big): keep the log, drop the photos.
         state = JSON.parse(snapshot);
         const v = myVisit(draft.bid);
-        if (v) Object.assign(v, { stars: draft.stars, note: draft.note.trim(), visitedOn: draft.date, photo: null, createdAt: Date.now() });
-        else state.visits.push({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, stars: draft.stars, note: draft.note.trim(), photo: null, visitedOn: draft.date, createdAt: Date.now() });
+        if (v) Object.assign(v, fields, { photos: [] });
+        else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: [] }, fields));
         state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === draft.bid));
         save();
-        msg = 'Saved without the photo — browser storage is full';
+        msg = 'Saved without photos — browser storage is full';
       }
+      Sound.success();
       const bid = draft.bid;
       draft = null;
       bTab = 'critiques';
       trail.push('/b/' + bid);
       location.replace('#/b/' + bid);
-      setTimeout(() => toast(msg), 30);
+      setTimeout(() => { celebrate(); toast(msg); }, 30);
     },
   };
 
@@ -1293,6 +1527,7 @@
       if (timeEl) timeEl.textContent = h.t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       if (labelEl) labelEl.textContent = lightLabel(h.t, c.sun);
     },
+    epbio(el) { document.getElementById('ep-bio-count').textContent = el.value.length + ' / 140'; },
   };
 
   root.addEventListener('click', e => {
@@ -1303,10 +1538,20 @@
   });
   root.addEventListener('input', e => { const f = e.target.dataset && e.target.dataset.input; if (f && inputs[f]) inputs[f](e.target); });
   root.addEventListener('change', e => {
-    if (e.target.dataset && e.target.dataset.change === 'photo' && e.target.files[0]) {
-      resizeImage(e.target.files[0], 900, url => {
+    if (e.target.dataset && e.target.dataset.change === 'photo' && e.target.files.length && draft) {
+      const files = Array.from(e.target.files).slice(0, MAX_PHOTOS - draft.photos.length);
+      let pending = files.length;
+      files.forEach(f => resizeImage(f, 800, url => {
+        if (url && draft && draft.photos.length < MAX_PHOTOS) draft.photos.push(url);
+        else if (!url) toast('Couldn’t read one of those images');
+        if (--pending === 0) render();
+      }));
+    }
+    if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
+      resizeImage(e.target.files[0], 300, url => {
         if (!url) return toast('Couldn’t read that image');
-        if (draft) { draft.photo = url; render(); }
+        me().photo = url;
+        save(); Sound.success(); render();
       });
     }
   });
