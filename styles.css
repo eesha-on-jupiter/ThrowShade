@@ -393,8 +393,6 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .avatar-pick.on { border-color: var(--ink); }
 .signin-avatar { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .signin-avatar .avatar-edit { background: none; border: 0; padding: 0; }
-.avatar-menu { align-self: stretch; padding: 12px; border-radius: 16px; background: var(--fill); }
-.avatar-upload { display: flex; align-items: center; justify-content: center; color: var(--text-2); }
 #su-avatar { width: 144px; height: 144px; background-size: cover; background-position: center; }
 .signin-avatar .avatar-edit-badge { right: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 17px; }
 .avatar-edit { position: relative; display: inline-block; cursor: pointer; flex-shrink: 0; }
