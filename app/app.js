@@ -167,6 +167,7 @@
     edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
     switch: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
   };
@@ -306,13 +307,10 @@
     document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
     const pv = document.getElementById('su-avatar');
     if (pv) pv.style.backgroundImage = `url('${src}')`;
-    toggleAvatarMenu(false);
   }
-  function toggleAvatarMenu(open) {
-    const m = document.getElementById('su-avatar-menu');
-    if (!m) return;
-    m.hidden = open === undefined ? !m.hidden : !open;
-    document.querySelector('[data-act="toggleavatars"]').setAttribute('aria-expanded', String(!m.hidden));
+  function randomAvatar(except) {
+    const pool = PRESET_AVATARS.filter(p => p !== except);
+    return pool[Math.floor(Math.random() * pool.length)];
   }
   const trail = [];
 
@@ -324,20 +322,13 @@
         <div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)}</div></div>
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
-    // New sign-ups start with a random preset; the camera opens the full menu.
-    if (!pickedPhoto) pickedPhoto = PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)];
+    // New sign-ups start with a random preset; the refresh button rolls another.
+    if (!pickedPhoto) pickedPhoto = randomAvatar();
     return `<div class="screen"><div class="signin">
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
       <div class="signin-avatar">
-        <button class="avatar-edit" data-act="toggleavatars" aria-label="Choose a profile picture" aria-expanded="false"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></button>
-        <div class="avatar-menu" id="su-avatar-menu" hidden>
-          <div class="avatar-picker">
-            <label class="avatar-pick avatar-upload" for="su-avatar-in" aria-label="Upload a photo">${icon('camera')}</label>
-            ${PRESET_AVATARS.map(p => `<button class="avatar-pick ${pickedPhoto === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}
-          </div>
-          <input id="su-avatar-in" type="file" accept="image/*" hidden data-change="suavatar">
-        </div>
+        <button class="avatar-edit" data-act="shuffleavatar" aria-label="Try another profile picture"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('refresh', 'sm')}</span></button>
       </div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
@@ -1364,7 +1355,7 @@
     closelog() { draft = null; back(); },
     closeedit() { pickedPhoto = undefined; back(); },
     // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
-    toggleavatars() { toggleAvatarMenu(); },
+    shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
     pickavatar(d, el) {
       setPicked(d.src);
       el.classList.add('on');
@@ -1515,9 +1506,6 @@
         else if (!url) toast('Couldn’t read one of those images');
         if (--pending === 0) render();
       }));
-    }
-    if (e.target.dataset && e.target.dataset.change === 'suavatar' && e.target.files[0]) {
-      resizeImage(e.target.files[0], 300, url => url ? setPicked(url) : toast('Couldn’t read that image'));
     }
     if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
       resizeImage(e.target.files[0], 300, url => {
