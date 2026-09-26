@@ -23,6 +23,8 @@
   const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
   const kindOf = b => b.kind || 'building';
   const MAX_PHOTOS = 4;
+  // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
+  const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
     Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
@@ -297,6 +299,7 @@
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
+  let epPhoto;
   const trail = [];
 
   // ---------- Views ----------
@@ -753,7 +756,9 @@
     const u = me();
     return sheet('Edit profile', 1, 1,
       `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
-      `<div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
+      `<div class="field"><div class="label">Profile picture</div>
+         <div class="avatar-picker">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
+       <div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
        <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
        <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
          <div class="counter" id="ep-bio-count">${(u.bio || '').length} / 140</div></div>
@@ -1503,7 +1508,13 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
-    closeedit() { back(); },
+    closeedit() { epPhoto = undefined; back(); },
+    // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
+    pickavatar(d, el) {
+      epPhoto = d.src;
+      document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+      el.classList.add('on');
+    },
     saveprofile() {
       const u = me();
       const name = document.getElementById('ep-name').value.trim();
@@ -1513,6 +1524,8 @@
       if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
       if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
       u.name = name; u.handle = handle; u.bio = bio;
+      if (epPhoto) u.photo = epPhoto;
+      epPhoto = undefined;
       save(); Sound.success();
       back(); toast('Profile updated');
     },
