@@ -37,6 +37,18 @@
   }
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
+  // LEED badge: real, verified ratings (b.leed, hand-checked for a handful of buildings) win.
+  // Everywhere else this is an illustrative demo value only — deterministic per building, clearly
+  // labeled "(demo)" in the UI — never presented as a real certification for a real place.
+  const LEED_LEVELS = ['Certified', 'Silver', 'Gold', 'Platinum'];
+  function leedFor(b) {
+    if (b.leed) return { level: b.leed, real: true };
+    let h = 7;
+    for (let i = 0; i < b.id.length; i++) h = (h * 31 + b.id.charCodeAt(i)) | 0;
+    const n = Math.abs(h) % 10;
+    const level = LEED_LEVELS[Math.min(3, Math.floor(n / 2.5))];
+    return { level, real: false };
+  }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
     Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
@@ -179,6 +191,17 @@
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
     return vs.length ? vs[0].photos[0] : null;
   }
+  // A photo from a log that actually tagged this feature; else a distinct shot of the place (the vetted
+  // Commons photos first, then its Wikipedia gallery — round-robin by row so rows don't repeat); else the hero.
+  function photoForAspect(b, aspect, i) {
+    const tagged = visitsFor(b.id).filter(v => v.likes && v.likes.includes(aspect) && v.photos && v.photos.length)
+      .sort((x, y) => (y.userId === state.me) - (x.userId === state.me) || y.createdAt - x.createdAt);
+    if (tagged.length) return tagged[0].photos[0];
+    const pool = (SEED_PHOTOS[b.id] || []).map(x => x.url);
+    if (pool.length) return pool[i % pool.length];
+    if (b.gallery && b.gallery.length) return b.gallery[i % b.gallery.length];
+    return photoURL(b, 120);
+  }
 
   // ---------- Formatting ----------
   function esc(s) {
@@ -255,6 +278,7 @@
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+    leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -706,6 +730,7 @@
     const b = BY_ID[id];
     if (!b) return viewNotFound();
     const a = avgFor(b.id), mv = myVisit(b.id);
+    const leed = leedFor(b);
     const fids = followingIds(state.me);
     const vs = visitsFor(b.id).sort((x, y) =>
       (y.userId === state.me) - (x.userId === state.me) || fids.has(y.userId) - fids.has(x.userId) || y.createdAt - x.createdAt);
@@ -714,6 +739,7 @@
     vs.forEach(v => v.likes.forEach(l => { likeCounts[l] = (likeCounts[l] || 0) + 1; }));
     const liked = Object.entries(likeCounts).sort((x, y) => y[1] - x[1]);
     const want = isWant(state.me, b.id);
+    if (liked.length > 1 && !b.galleryDone && !b.gallery && b.wiki && !(SEED_PHOTOS[b.id] || []).length) fetchGallery(b);
     let tabBody;
     if (bTab === 'photos') {
       tabBody = photos.length
@@ -758,7 +784,7 @@
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
-        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
+        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -766,7 +792,25 @@
                  : `<div class="val">Not yet</div><div class="tiny muted">Log a visit to rate</div>`}
           </div>
         </div>
-        ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
+        ${liked.length ? `<div>
+          <div class="section-title">Popular features<span class="muted small">${vs.length} log${vs.length === 1 ? '' : 's'}</span></div>
+          <div class="stack-6">${liked.slice(0, 6).map(([l, n], i) => {
+            const photo = photoForAspect(b, l, i);
+            const thumbBg = photo
+              ? `background-image:url('${photo}');background-size:cover;background-position:center;`
+              : hatch(styleColor(b));
+            return `<div style="display:flex;align-items:center;gap:10px">
+              <div class="ph" style="width:44px;height:44px;border-radius:10px;flex-shrink:0;${thumbBg}"></div>
+              <div class="grow">
+                <div class="small" style="margin-bottom:4px">${esc(l)}</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="bar"><div style="width:${Math.round(n / vs.length * 100)}%"></div></div>
+                  <div class="tiny muted" style="flex-shrink:0">${n}</div>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}</div>
+        </div>` : ''}
         <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
         <div class="row-flex">
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
@@ -1492,6 +1536,28 @@
     b.enriching = false;
     save();
     if (currentPath() === '/b/' + b.id) render();
+  }
+
+  // Pull the other photos already sitting on a building's Wikipedia article, so "Popular features"
+  // doesn't have to repeat the single hero image for every row.
+  const BAD_IMG = /logo|icon|flag|symbol|locator|_map(_|\.)|\.svg$|\.ogv?$|\.pdf$|\.gif$/i;
+  async function fetchGallery(b) {
+    b.galleryDone = true;
+    try {
+      const title = decodeURIComponent((b.wiki.split('/wiki/')[1] || '').replace(/_/g, ' '));
+      if (!title) return;
+      const d = await fetchJSON('https://en.wikipedia.org/w/api.php?' + qs({
+        action: 'query', format: 'json', origin: '*', generator: 'images', gimlimit: 20,
+        prop: 'imageinfo', iiprop: 'url|size', iiurlwidth: 300, titles: title,
+      }));
+      const pages = Object.values((d.query && d.query.pages) || {});
+      const gallery = pages
+        .filter(p => p.imageinfo && p.imageinfo[0] && !BAD_IMG.test(p.title) && (p.imageinfo[0].width || 0) >= 300)
+        .map(p => p.imageinfo[0].thumburl || p.imageinfo[0].url)
+        .filter(Boolean)
+        .slice(0, 8);
+      if (gallery.length) { b.gallery = gallery; if (currentPath() === '/b/' + b.id) render(); }
+    } catch (e) { /* offline or rate-limited: features fall back to the hero photo */ }
   }
 
   // ---------- Photo resize ----------
