@@ -87,10 +87,10 @@ window.TS_BUILDINGS = [
 ];
 
 window.TS_SEED_USERS = [
-  { id: 'u-mara', handle: 'mara.k', name: 'Mara Kovač', bio: 'Light hunter. Kahn apologist.' },
-  { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.' },
-  { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.' },
-  { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.' },
+  { id: 'u-mara', handle: 'mara.k', name: 'Mara Kovač', bio: 'Light hunter. Kahn apologist.', photo: 'avatars/avatar_25.png' },
+  { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.', photo: 'avatars/avatar_26.png' },
+  { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.', photo: 'avatars/avatar_29.png' },
+  { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.', photo: 'avatars/avatar_24.png' },
 ];
 
 // [userId, buildingId, stars, note, hoursAgo]
