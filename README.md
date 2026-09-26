@@ -42,4 +42,6 @@ To test on a real phone on the same Wi-Fi, open `http://<your-laptop-ip>:5173`. 
 | `app/data.js` | Hand-picked buildings, seeded critics, their logs, demo location |
 | `app/wikidata.js` | Generated Chicago buildings (don't edit by hand) |
 | `tools/fetch_wikidata.py` | Wikidata/Wikipedia/Commons import script |
+| `app/seed-photos.js` | Generated stand-in photos for seeded posts (don't edit by hand) |
+| `tools/fetch_seed_photos.py` | Fetches those photos from Wikimedia Commons categories |
 | `app/fonts/` | IBM Plex Sans (from the mockup bundle) |

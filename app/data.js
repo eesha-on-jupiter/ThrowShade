@@ -28,20 +28,20 @@ window.TS_BUILDINGS = [
   { id: 'moma', name: 'Museum of Modern Art', architect: 'Yoshio Taniguchi', year: 2004, typology: 'Museum', style: 'Modernist', city: 'New York', country: 'USA', lat: 40.7614, lng: -73.9776 },
   { id: 'breuer', name: 'The Breuer Building', architect: 'Marcel Breuer', year: 1966, typology: 'Museum', style: 'Brutalist', city: 'New York', country: 'USA', lat: 40.7735, lng: -73.9640 },
   { id: 'chrysler', name: 'Chrysler Building', architect: 'William Van Alen', year: 1930, typology: 'Office tower', style: 'Art Deco', city: 'New York', country: 'USA', lat: 40.7516, lng: -73.9755 },
-  { id: 'empire-state', name: 'Empire State Building', architect: 'Shreve, Lamb & Harmon', year: 1931, typology: 'Office tower', style: 'Art Deco', city: 'New York', country: 'USA', lat: 40.7484, lng: -73.9857 },
+  { id: 'empire-state', name: 'Empire State Building', architect: 'Shreve, Lamb & Harmon', year: 1931, typology: 'Office tower', style: 'Art Deco', city: 'New York', country: 'USA', lat: 40.7484, lng: -73.9857, leed: 'Gold' },
   { id: 'grand-central', name: 'Grand Central Terminal', architect: 'Reed & Stem · Warren & Wetmore', year: 1913, typology: 'Transit', style: 'Historic', city: 'New York', country: 'USA', lat: 40.7527, lng: -73.9772 },
   { id: 'flatiron', name: 'Flatiron Building', architect: 'Daniel Burnham', year: 1902, typology: 'Office tower', style: 'Historic', city: 'New York', country: 'USA', lat: 40.7411, lng: -73.9897 },
   { id: 'att-building', name: '550 Madison (AT&T Building)', architect: 'Philip Johnson & John Burgee', year: 1984, typology: 'Office tower', style: 'Postmodern', city: 'New York', country: 'USA', lat: 40.7614, lng: -73.9731 },
   { id: 'iac', name: 'IAC Building', architect: 'Frank Gehry', year: 2007, typology: 'Office', style: 'Deconstructivist', city: 'New York', country: 'USA', lat: 40.7489, lng: -74.0079 },
   { id: '8-spruce', name: '8 Spruce Street', architect: 'Frank Gehry', year: 2011, typology: 'Residential tower', style: 'Deconstructivist', city: 'New York', country: 'USA', lat: 40.7107, lng: -74.0056 },
-  { id: '41-cooper', name: '41 Cooper Square', architect: 'Morphosis', year: 2009, typology: 'Academic', style: 'Deconstructivist', city: 'New York', country: 'USA', lat: 40.7288, lng: -73.9905 },
+  { id: '41-cooper', name: '41 Cooper Square', architect: 'Morphosis', year: 2009, typology: 'Academic', style: 'Deconstructivist', city: 'New York', country: 'USA', lat: 40.7288, lng: -73.9905, leed: 'Platinum' },
   { id: 'whitney', name: 'Whitney Museum of American Art', architect: 'Renzo Piano', year: 2015, typology: 'Museum', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7396, lng: -74.0089 },
   { id: 'oculus', name: 'The Oculus', architect: 'Santiago Calatrava', year: 2016, typology: 'Transit', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7115, lng: -74.0110 },
   { id: '56-leonard', name: '56 Leonard', architect: 'Herzog & de Meuron', year: 2017, typology: 'Residential tower', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7178, lng: -74.0056 },
   { id: 'via-57', name: 'VIA 57 West', architect: 'BIG', year: 2016, typology: 'Residential', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7713, lng: -73.9937 },
   { id: 'vessel', name: 'Vessel', architect: 'Heatherwick Studio', year: 2019, typology: 'Landmark', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7538, lng: -74.0022 },
   { id: 'new-museum', name: 'New Museum', architect: 'SANAA', year: 2007, typology: 'Museum', style: 'Contemporary', city: 'New York', country: 'USA', lat: 40.7223, lng: -73.9929 },
-  { id: 'hearst', name: 'Hearst Tower', architect: 'Foster + Partners', year: 2006, typology: 'Office tower', style: 'High-tech', city: 'New York', country: 'USA', lat: 40.7663, lng: -73.9827 },
+  { id: 'hearst', name: 'Hearst Tower', architect: 'Foster + Partners', year: 2006, typology: 'Office tower', style: 'High-tech', city: 'New York', country: 'USA', lat: 40.7663, lng: -73.9827, leed: 'Gold' },
   { id: 'glass-house', name: 'The Glass House', architect: 'Philip Johnson', year: 1949, typology: 'House', style: 'Modernist', city: 'New Canaan', country: 'USA', lat: 41.1437, lng: -73.4960 },
 
   // Rest of North America
@@ -87,10 +87,10 @@ window.TS_BUILDINGS = [
 ];
 
 window.TS_SEED_USERS = [
-  { id: 'u-mara', handle: 'mara.k', name: 'Mara Kovač', bio: 'Light hunter. Kahn apologist.' },
-  { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.' },
-  { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.' },
-  { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.' },
+  { id: 'u-mara', handle: 'mara.k', name: 'Mara Kovač', bio: 'Light hunter. Kahn apologist.', photo: 'avatars/avatar_25.png' },
+  { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.', photo: 'avatars/avatar_26.png' },
+  { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.', photo: 'avatars/avatar_29.png' },
+  { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.', photo: 'avatars/avatar_24.png' },
 ];
 
 // [userId, buildingId, stars, note, hoursAgo]
@@ -178,6 +178,18 @@ window.TS_SEED_LIKES = {
   'u-jonah|wd-Q3005469': ['Concept', 'Atmosphere', 'Context'],
   'u-jonah|att-building': ['Facade', 'Concept', 'Detail'],
 };
+
+// Shared lists. items: [buildingId, addedBy]. invitesNewUsers: new sign-ups are added as members (demo).
+window.TS_SEED_LISTS = [
+  {
+    id: 'l-mies', name: 'Mies pilgrimage', ownerId: 'u-mara', members: ['u-mara', 'u-theo'], invitesNewUsers: true, hoursAgo: 30,
+    items: [['wd-Q753180', 'u-mara'], ['farnsworth', 'u-mara'], ['seagram', 'u-theo'], ['barcelona-pavilion', 'u-mara']],
+  },
+  {
+    id: 'l-bridges', name: 'River bridges walk', ownerId: 'u-priya', members: ['u-priya', 'u-jonah'], hoursAgo: 12,
+    items: [['wd-Q1928112', 'u-priya'], ['wd-Q2002163', 'u-jonah'], ['wd-Q5127391', 'u-priya'], ['wd-Q7026554', 'u-priya']],
+  },
+];
 
 // [userId, buildingId]
 window.TS_SEED_WANT = [

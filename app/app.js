@@ -23,6 +23,32 @@
   const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
   const kindOf = b => b.kind || 'building';
   const MAX_PHOTOS = 4;
+  // Stand-in photos for seeded critics' posts (app/seed-photos.js), credited under the photos.
+  const SEED_PHOTOS = window.TS_SEED_PHOTOS || {};
+  const PHOTO_CREDITS = {};
+  Object.values(SEED_PHOTOS).forEach(list => list.forEach(x => { PHOTO_CREDITS[x.url] = x.credit; }));
+  const SEED_PHOTO_COUNTS = [0, 2, 0, 1, 0, 0, 3, 0, 1, 0];
+  function seedPhotosFor(userId, bid, i) {
+    const pool = SEED_PHOTOS[bid] || [];
+    if (!pool.length) return [];
+    const shift = Math.max(0, window.TS_SEED_USERS.findIndex(u => u.id === userId));
+    const n = Math.min(SEED_PHOTO_COUNTS[i % SEED_PHOTO_COUNTS.length], pool.length);
+    return Array.from({ length: n }, (_, k) => pool[(shift + k) % pool.length].url);
+  }
+  // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
+  const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
+  // LEED badge: real, verified ratings (b.leed, hand-checked for a handful of buildings) win.
+  // Everywhere else this is an illustrative demo value only — deterministic per building, clearly
+  // labeled "(demo)" in the UI — never presented as a real certification for a real place.
+  const LEED_LEVELS = ['Certified', 'Silver', 'Gold', 'Platinum'];
+  function leedFor(b) {
+    if (b.leed) return { level: b.leed, real: true };
+    let h = 7;
+    for (let i = 0; i < b.id.length; i++) h = (h * 31 + b.id.charCodeAt(i)) | 0;
+    const n = Math.abs(h) % 10;
+    const level = LEED_LEVELS[Math.min(3, Math.floor(n / 2.5))];
+    return { level, real: false };
+  }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
     Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
@@ -39,6 +65,19 @@
     delete v.photo;
     if (!v.likes) v.likes = [];
   });
+  // (Re)apply stand-in photos to seeded posts; photos people uploaded (data: URLs) are never touched.
+  if (state.seedPhotos !== 3) {
+    state.visits.forEach(v => {
+      const m = /^v(\d+)$/.exec(v.id);
+      if (m && v.photos.every(p => !p.startsWith('data:'))) v.photos = seedPhotosFor(v.userId, v.buildingId, +m[1]);
+    });
+    state.seedPhotos = 3;
+  }
+  // Older saves predate the seeded critics' avatars.
+  window.TS_SEED_USERS.forEach(s => {
+    const u = state.users.find(x => x.id === s.id);
+    if (u && !u.photo && s.photo) u.photo = s.photo;
+  });
 
   function seed() {
     const now = Date.now();
@@ -52,15 +91,19 @@
       return !b || stars < 3 ? [] : (STYLE_LIKES[b.style] || ['Design']).slice(0, 2 + (i % 2));
     };
     const visits = window.TS_SEED_VISITS.map(([userId, buildingId, stars, note, h], i) => ({
-      id: 'v' + i, userId, buildingId, stars, note, photos: [], likes: seedLikes(userId, buildingId, stars, i),
+      id: 'v' + i, userId, buildingId, stars, note, photos: seedPhotosFor(userId, buildingId, i), likes: seedLikes(userId, buildingId, stars, i),
       visitedOn: isoDate(now - h * HOUR - (i % 4) * DAY),
       createdAt: now - h * HOUR,
     }));
     const want = window.TS_SEED_WANT.map(([userId, buildingId]) => ({ userId, buildingId, createdAt: now }));
-    return { me: null, users, follows, visits, want, places: [] };
+    const lists = (window.TS_SEED_LISTS || []).map(l => ({
+      id: l.id, name: l.name, ownerId: l.ownerId, members: l.members.slice(), invitesNewUsers: !!l.invitesNewUsers, createdAt: now - l.hoursAgo * HOUR,
+      items: l.items.filter(([bid]) => BY_ID[bid]).map(([bid, by], i) => ({ buildingId: bid, addedBy: by || l.ownerId, createdAt: now - (l.hoursAgo - i) * HOUR })),
+    }));
+    return { me: null, users, follows, visits, want, places: [], lists };
   }
   function load() {
-    try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.users ? Object.assign({ places: [] }, s) : null; } catch (e) { return null; }
+    try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.users ? Object.assign({ places: [], lists: [] }, s) : null; } catch (e) { return null; }
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); return true; } catch (e) { return false; }
@@ -82,9 +125,82 @@
     if (!vs.length) return { avg: null, n: 0 };
     return { avg: vs.reduce((s, v) => s + v.stars, 0) / vs.length, n: vs.length };
   }
+  function topRated(limit) {
+    return BUILDINGS.map(b => ({ b, a: avgFor(b.id) }))
+      .filter(x => x.a.n > 0)
+      .sort((x, y) => y.a.avg - x.a.avg || y.a.n - x.a.n)
+      .slice(0, limit || 10);
+  }
+  // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
+  function recsFor(uid, limit) {
+    const visited = new Set(visitsBy(uid).map(v => v.buildingId));
+    const fids = followingIds(uid);
+    const styleTotals = {};
+    visitsBy(uid).forEach(v => {
+      const b = BY_ID[v.buildingId]; if (!b || !b.style) return;
+      (styleTotals[b.style] = styleTotals[b.style] || []).push(v.stars);
+    });
+    const favStyles = new Set(Object.entries(styleTotals)
+      .filter(([, arr]) => arr.reduce((s, n) => s + n, 0) / arr.length >= 4)
+      .map(([s]) => s));
+    const distMap = new Map(nearest(BUILDINGS).map(x => [x.b.id, x.d]));
+    const scored = BUILDINGS.filter(b => !visited.has(b.id)).map(b => {
+      const friendVs = visitsFor(b.id).filter(v => fids.has(v.userId));
+      const friendAvg = friendVs.length ? friendVs.reduce((s, v) => s + v.stars, 0) / friendVs.length : 0;
+      const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
+      let score = 0, reason = null;
+      if (friendAvg >= 4) { score += friendAvg * 3; reason = friendVs.length > 1 ? `${friendVs.length} friends loved it` : 'A friend loved it'; }
+      if (!reason && favStyles.has(b.style)) { score += 4; reason = `You tend to love ${b.style}`; }
+      if (!reason && d < 3) { score += 2; reason = 'Right nearby'; }
+      score += Math.max(0, 2 - d / 15);
+      return { b, score, reason, d };
+    }).filter(x => x.reason);
+    scored.sort((x, y) => y.score - x.score);
+    if (scored.length < (limit || 12)) {
+      const already = new Set(scored.map(x => x.b.id));
+      topRated(40).forEach(x => {
+        if (scored.length >= (limit || 12)) return;
+        if (visited.has(x.b.id) || already.has(x.b.id)) return;
+        scored.push({ b: x.b, score: 0, reason: 'Highly rated', d: distMap.get(x.b.id) });
+        already.add(x.b.id);
+      });
+    }
+    return scored.slice(0, limit || 12);
+  }
+  // Guides: shelves grouped by style, kind and city — built from whatever data already exists.
+  function buildGuides() {
+    const guides = [];
+    const byStyle = {};
+    BUILDINGS.forEach(b => { if (b.style) (byStyle[b.style] = byStyle[b.style] || []).push(b); });
+    Object.entries(byStyle).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 4)
+      .forEach(([style, list]) => guides.push({ title: style, sub: `${list.length} places`, items: rankByRating(list) }));
+    ['bridge', 'art', 'spot'].forEach(k => {
+      const list = BUILDINGS.filter(b => kindOf(b) === k);
+      if (list.length) guides.push({ title: KINDS[k] + 's', sub: `${list.length} places`, items: rankByRating(list) });
+    });
+    const byCity = {};
+    BUILDINGS.forEach(b => { if (b.city) (byCity[b.city] = byCity[b.city] || []).push(b); });
+    const topCity = Object.entries(byCity).sort((a, b) => b[1].length - a[1].length)[0];
+    if (topCity && topCity[1].length >= 3) guides.push({ title: topCity[0], sub: `${topCity[1].length} places`, items: rankByRating(topCity[1]) });
+    return guides;
+  }
+  function rankByRating(list) {
+    return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
   function photoFor(bid) {
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
     return vs.length ? vs[0].photos[0] : null;
+  }
+  // A photo from a log that actually tagged this feature; else a distinct shot of the place (the vetted
+  // Commons photos first, then its Wikipedia gallery — round-robin by row so rows don't repeat); else the hero.
+  function photoForAspect(b, aspect, i) {
+    const tagged = visitsFor(b.id).filter(v => v.likes && v.likes.includes(aspect) && v.photos && v.photos.length)
+      .sort((x, y) => (y.userId === state.me) - (x.userId === state.me) || y.createdAt - x.createdAt);
+    if (tagged.length) return tagged[0].photos[0];
+    const pool = (SEED_PHOTOS[b.id] || []).map(x => x.url);
+    if (pool.length) return pool[i % pool.length];
+    if (b.gallery && b.gallery.length) return b.gallery[i % b.gallery.length];
+    return photoURL(b, 120);
   }
 
   // ---------- Formatting ----------
@@ -162,6 +278,7 @@
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+    leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -200,10 +317,17 @@
     return likes && likes.length ? `<div class="chips likes">${likes.map(l => `<span class="chip">${esc(l)}</span>`).join('')}</div>` : '';
   }
   // A log's own photos: 1 full width, 2 side by side, 3 = one large + two, 4 = grid.
+  let galleries = [];
+  function gallery(list) { galleries.push(list); return galleries.length - 1; }
   function shotsHTML(photos) {
     if (!photos || !photos.length) return '';
     const list = photos.slice(0, MAX_PHOTOS);
-    return `<div class="shots n${list.length}">${list.map(p => `<div class="shot" style="background-image:url('${p}')"></div>`).join('')}</div>`;
+    const g = gallery(list);
+    const credits = list.map(p => PHOTO_CREDITS[p]).filter(Boolean);
+    const creditLine = credits.length
+      ? `<div class="shot-credit">Photo${credits.length > 1 ? 's' : ''}: ${esc([...new Set(credits.map(c => c.artist))].join(', '))} · <a href="${esc(credits[0].page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
+      : '';
+    return `<div class="shots n${list.length}">${list.map((p, i) => `<button class="shot" data-act="viewphoto" data-g="${g}" data-i="${i}" style="background-image:url('${p}')" aria-label="View photo ${i + 1} of ${list.length}"></button>`).join('')}</div>${creditLine}`;
   }
   const phLabel = b => [b.style, b.year].filter(Boolean).join(' · ').toUpperCase();
   const byLine = b => [b.architect, b.year].filter(Boolean).join(' · ');
@@ -285,6 +409,7 @@
 
   // ---------- UI state ----------
   const root = document.getElementById('app');
+  let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapKindOpen = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
   let findTab = 'buildings', findQ = '';
   let listSort = 'top';
@@ -292,6 +417,7 @@
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
+  let epPhoto;
   const trail = [];
 
   // ---------- Views ----------
@@ -322,7 +448,7 @@
     let action;
     if (mine) action = `<button class="link" data-go="#/log/${b.id}">${icon('edit', 'sm')}Edit</button>`;
     else if (mv) action = `<button class="link" data-go="#/b/${b.id}">${icon('check', 'sm')}Been · you gave ${mv.stars}★</button>`;
-    else action = `<button class="link ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`;
+    else action = `<button class="link ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>`;
     const where = [kindOf(b) !== 'building' && KINDS[kindOf(b)], b.city, ago(v.createdAt)].filter(Boolean).join(' · ');
     return `<div class="card">
       <div class="card-head">
@@ -371,7 +497,30 @@
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
       `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
-    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+    const top = topRated(10);
+    const rail = top.length ? `<div class="pad"><div class="section-title">Top rated<button class="link" data-go="#/top">See all${icon('chevron', 'sm')}</button></div></div>
+      <div class="rail">${top.map((x, i) => `<button class="rail-item" data-go="#/b/${x.b.id}">
+        ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false, inner: `<span class="rail-rank">${i + 1}</span>` })}
+        <div class="rail-name ellipsis">${esc(x.b.name)}</div>
+        <div class="rail-meta">${scoreHTML(x.a.avg.toFixed(1))}<span class="muted">· ${x.a.n}</span></div>
+      </button>`).join('')}</div>
+      <div class="pad" style="padding-top:24px"><div class="section-title">Latest</div></div>` : '';
+    return `<div class="screen with-nav">${head}${rail}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+  }
+
+  function viewTopRated() {
+    const list = topRated(50);
+    const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
+        ${scoreHTML(x.a.avg.toFixed(1))}
+      </button>`).join('') : `<div class="empty">Nothing rated yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Top rated</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function buildingRow(b, right) {
@@ -419,51 +568,175 @@
     </div>${nav('')}`;
   }
 
+  // ---------- Lists: Want to Visit (private) + custom lists shared with invited members ----------
+  const myLists = () => state.lists.filter(l => l.members.includes(state.me)).sort((a, b) => b.createdAt - a.createdAt);
+  const inList = (l, bid) => l.items.some(i => i.buildingId === bid);
+  const isSaved = bid => isWant(state.me, bid) || myLists().some(l => inList(l, bid));
+  const handles = ids => ids.map(user).filter(Boolean).map(u => '@' + u.handle);
+  function listMeta(l) {
+    const n = l.items.length;
+    const others = handles(l.members.filter(m => m !== state.me));
+    const who = l.ownerId === state.me
+      ? (others.length ? 'with ' + others.slice(0, 2).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : '') : 'only you')
+      : 'invited by ' + handles([l.ownerId]).join('');
+    return `${n} place${n === 1 ? '' : 's'} · ${who}`;
+  }
+  function listTile(l) {
+    const first = l.items.length && BY_ID[l.items[l.items.length - 1].buildingId];
+    return first ? ph(first, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`;
+  }
+
+  // Tabs: your lists, Recs and Guides (Recs/Guides from Herft's shandon-updates).
   function viewLists(tab) {
-    const tabs = `<div class="tabs" style="margin:0 16px 12px">
-      <button class="${tab === 'been' ? 'on' : ''}" data-go="#/lists">Been</button>
-      <button class="${tab === 'want' ? 'on' : ''}" data-go="#/lists/want">Want to Visit</button></div>`;
+    const tabs = `<div class="tabs" style="margin:0 20px 12px">
+      <button class="${tab === 'mine' ? 'on' : ''}" data-go="#/lists">My lists</button>
+      <button class="${tab === 'recs' ? 'on' : ''}" data-go="#/lists/recs">Recs</button>
+      <button class="${tab === 'guides' ? 'on' : ''}" data-go="#/lists/guides">Guides</button></div>`;
     let body;
-    if (tab === 'want') {
-      const items = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
-      const fids = followingIds(state.me);
-      body = items.length ? items.map(w => {
-        const b = BY_ID[w.buildingId]; if (!b) return '';
-        const loved = visitsFor(b.id).filter(v => fids.has(v.userId) && v.stars >= 4).length;
-        const a = avgFor(b.id);
-        return `<div class="row" data-go="#/b/${b.id}">
-          ${ph(b, { style: 'width:38px;height:38px', go: false })}
-          <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)}${loved ? ` · ${loved} friend${loved > 1 ? 's' : ''} loved it` : ''}</div></div>
-          ${a.avg ? `<b>${a.avg.toFixed(1)}</b>` : ''}
-          <button class="btn-sq thin" style="width:34px;height:34px" data-act="unwant" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>
-        </div>`;
-      }).join('') : `<div class="empty">Nothing saved yet.<br>Tap “+ Want to Visit” on a friend’s log.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/find">${icon('search', 'sm')}Find places</button>`;
+    if (tab === 'recs') {
+      const recs = recsFor(state.me, 12);
+      body = `<div class="stack-6 pad">${recs.length ? recs.map(x => `<div class="row" data-go="#/b/${x.b.id}">
+          ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+          <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
+          <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
+        </div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
+    } else if (tab === 'guides') {
+      const guides = buildGuides();
+      body = `<div class="pad">${guides.length ? guides.map(g => `
+        <div class="section-title" style="margin-top:8px">${esc(g.title)}<span class="muted small">${esc(g.sub)}</span></div>
+        <div class="rail flush">${g.items.slice(0, 10).map(b => `<button class="rail-item" data-go="#/b/${b.id}">
+          ${ph(b, { w: 300, cls: 'rail-photo', label: phLabel(b), go: false })}
+          <div class="rail-name ellipsis">${esc(b.name)}</div>
+          <div class="rail-meta muted">${esc(b.city || '')}</div>
+        </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
     } else {
-      const vs = visitsBy(state.me).slice().sort(listSort === 'top' ? (a, b) => b.stars - a.stars || b.createdAt - a.createdAt : (a, b) => b.createdAt - a.createdAt);
-      const pill = (k, l) => `<button class="pill ${listSort === k ? 'on' : ''}" data-act="sort" data-k="${k}">${l}</button>`;
-      body = `<div class="row-flex">${pill('top', 'Top rated')}${pill('recent', 'Recent')}</div>`;
-      body += vs.length ? vs.map((v, i) => {
-        const b = BY_ID[v.buildingId]; if (!b) return '';
-        return `<button class="row" data-go="#/b/${b.id}">
-          <span class="rank">${i + 1}</span>
-          ${ph(b, { style: 'width:38px;height:38px', go: false })}
-          <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)} · ${fmtDate(v.visitedOn)}</div></div>
-          ${starsHTML(v.stars)}
-        </button>`;
-      }).join('') : `<div class="empty">You haven’t logged anything yet.</div>`;
-      body += `<button class="btn dashed" style="height:56px" data-go="#/log">${icon('plus', 'sm')}Log a place</button>`;
+      const want = state.want.filter(w => w.userId === state.me).length;
+      const lists = myLists();
+      body = `<div class="stack-6 pad">
+        <button class="row" data-go="#/list/want">
+          <div class="list-icon">${icon('bookmark')}</div>
+          <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
+          ${icon('chevron', 'sm')}
+        </button>
+        ${lists.map(l => `<button class="row" data-go="#/list/${l.id}">
+          ${listTile(l)}
+          <div class="grow"><b class="ellipsis">${esc(l.name)}</b><div class="sub ellipsis">${esc(listMeta(l))}</div></div>
+          <div class="avatars">${l.members.slice(0, 3).map(m => user(m)).filter(Boolean).map(u => avatar(u, 'xs').replace('data-go', 'data-x')).join('')}</div>
+        </button>`).join('')}
+      </div>
+      <div class="pad" style="margin-top:14px"><button class="btn dashed" style="width:100%;height:52px" data-go="#/newlist">${icon('plus', 'sm')}New list</button></div>`;
     }
     return `<div class="screen with-nav">
-      <div class="topbar"><div class="h1">Lists</div></div>
-      ${tabs}<div class="stack-6 pad">${body}</div><div class="spacer"></div>
+      <div class="topbar"><div class="h1">Lists</div><button class="btn-sq thin" data-go="#/newlist" aria-label="New list">${icon('plus')}</button></div>
+      ${tabs}${body}
+      <div class="spacer"></div>
     </div>${nav('lists')}`;
+  }
+
+  function placeRow(b, sub, remove) {
+    return `<div class="row" data-go="#/b/${b.id}">
+      ${ph(b, { w: 120, style: 'width:44px;height:44px', go: false })}
+      <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(sub)}</div></div>
+      ${remove || ''}
+    </div>`;
+  }
+
+  function viewWantList() {
+    const items = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
+    const rows = items.map(w => {
+      const b = BY_ID[w.buildingId]; if (!b) return '';
+      return placeRow(b, makerLine(b), `<button class="btn-sq thin" style="width:34px;height:34px" data-act="unwant" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>`);
+    }).join('');
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Want to Visit</div></div>
+      <div class="stack-6 pad">${rows || '<div class="empty">Nothing saved yet.<br>Tap Save on any place.</div>'}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
+  function viewList(id) {
+    const l = state.lists.find(x => x.id === id);
+    if (!l || !l.members.includes(state.me)) return viewNotFound();
+    const rows = l.items.slice().sort((a, b) => b.createdAt - a.createdAt).map(it => {
+      const b = BY_ID[it.buildingId]; if (!b) return '';
+      const adder = user(it.addedBy);
+      const canRemove = it.addedBy === state.me || l.ownerId === state.me;
+      return placeRow(b, [b.city, adder && (adder.id === state.me ? 'added by you' : 'added by @' + adder.handle)].filter(Boolean).join(' · '),
+        canRemove ? `<button class="btn-sq thin" style="width:34px;height:34px" data-act="unlist" data-list="${l.id}" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>` : '');
+    }).join('');
+    const members = l.members.map(user).filter(Boolean);
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${esc(l.name)}</div>
+        <button class="btn-sq thin" data-go="#/list/${l.id}/invite" aria-label="Invite people">${icon('users')}</button></div>
+      <div class="pad members" data-go="#/list/${l.id}/invite">
+        <div class="avatars">${members.slice(0, 5).map(u => avatar(u, 'xs').replace('data-go', 'data-x')).join('')}</div>
+        <span class="small muted">${members.length} member${members.length === 1 ? '' : 's'} · ${l.ownerId === state.me ? 'you made this list' : 'made by @' + esc(user(l.ownerId).handle)}</span>
+        <span class="small" style="margin-left:auto">Invite</span>
+      </div>
+      <div class="stack-6 pad">${rows || '<div class="empty">No places yet.<br>Tap Save on any place to add it here.</div>'}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
+  // Name + invite picker, used by "New list" and inside the save sheet.
+  function newListForm(bid) {
+    const others = state.users.filter(u => u.id !== state.me);
+    return `<div class="field"><label for="nl-name">List name</label><input id="nl-name" class="input" placeholder="e.g. Brutalist crawl" maxlength="40" autocomplete="off"></div>
+      <div class="field"><div class="label">Invite people <span class="muted" style="font-weight:400">optional</span></div>
+        <div class="chips">${others.map(u => `<button class="pill ${inviteSel.has(u.id) ? 'on' : ''}" data-act="pickinvite" data-u="${u.id}">@${esc(u.handle)}</button>`).join('')}</div></div>
+      <button class="btn-primary" data-act="createlist" data-bid="${bid || ''}">Create list</button>`;
+  }
+
+  function viewNewList() {
+    return sheet('New list', 1, 1, `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`, newListForm(''));
+  }
+
+  function checkRow(act, attrs, on, title, sub, lead) {
+    return `<button class="row check-row ${on ? 'on' : ''}" data-act="${act}" ${attrs}>
+      ${lead}<div class="grow"><b class="ellipsis">${esc(title)}</b><div class="sub ellipsis">${esc(sub)}</div></div>
+      <span class="check">${icon('check', 'sm')}</span>
+    </button>`;
+  }
+
+  function viewSaveTo(bid) {
+    const b = BY_ID[bid];
+    if (!b) return viewNotFound();
+    const want = state.want.filter(w => w.userId === state.me).length;
+    return sheet('Save to list', 1, 1,
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
+      `<div class="banner" style="display:flex;gap:12px;align-items:center;padding:10px">
+         ${ph(b, { w: 120, style: 'width:48px;height:48px', go: false })}
+         <div style="line-height:1.3;min-width:0"><b class="ellipsis" style="display:block">${esc(b.name)}</b><div class="small muted ellipsis">${esc(makerLine(b))}</div></div>
+       </div>
+       <div class="stack-6">
+         ${checkRow('togglewant', `data-id="${bid}"`, isWant(state.me, bid), 'Want to Visit', `${want} place${want === 1 ? '' : 's'} · only you`, `<div class="list-icon">${icon('bookmark')}</div>`)}
+         ${myLists().map(l => checkRow('togglelist', `data-list="${l.id}" data-id="${bid}"`, inList(l, bid), l.name, listMeta(l), listTile(l))).join('')}
+       </div>
+       <button class="btn dashed" style="height:48px" data-act="newlistform">${icon('plus', 'sm')}New list</button>
+       <div id="newlist" class="stack" hidden>${newListForm(bid)}</div>
+       <div class="sheet-foot"><button class="btn-primary" data-act="closelog">Done</button></div>`);
+  }
+
+  function viewInvite(id) {
+    const l = state.lists.find(x => x.id === id);
+    if (!l || !l.members.includes(state.me)) return viewNotFound();
+    const others = state.users.filter(u => u.id !== state.me);
+    return sheet(`Invite to “${esc(l.name)}”`, 1, 1,
+      `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
+      `<div class="small muted">Members can see the list and add places to it.</div>
+       <div class="stack-6">${others.map(u => {
+         const on = l.members.includes(u.id);
+         return checkRow(u.id === l.ownerId ? 'noop' : 'invite', `data-list="${l.id}" data-u="${u.id}"`, on, u.name,
+           '@' + u.handle + (u.id === l.ownerId ? ' · owner' : ''), avatar(u).replace('data-go', 'data-x'));
+       }).join('')}</div>
+       <div class="sheet-foot"><button class="btn-primary" data-act="closelog">Done</button></div>`);
   }
 
   function viewBuilding(id) {
     const b = BY_ID[id];
     if (!b) return viewNotFound();
     const a = avgFor(b.id), mv = myVisit(b.id);
+    const leed = leedFor(b);
     const fids = followingIds(state.me);
     const vs = visitsFor(b.id).sort((x, y) =>
       (y.userId === state.me) - (x.userId === state.me) || fids.has(y.userId) - fids.has(x.userId) || y.createdAt - x.createdAt);
@@ -472,10 +745,11 @@
     vs.forEach(v => v.likes.forEach(l => { likeCounts[l] = (likeCounts[l] || 0) + 1; }));
     const liked = Object.entries(likeCounts).sort((x, y) => y[1] - x[1]);
     const want = isWant(state.me, b.id);
+    if (liked.length > 1 && !b.galleryDone && !b.gallery && b.wiki && !(SEED_PHOTOS[b.id] || []).length) fetchGallery(b);
     let tabBody;
     if (bTab === 'photos') {
       tabBody = photos.length
-        ? `<div class="photo-grid">${photos.map(p => `<div class="ph photo" style="background-image:url('${p}');background-size:cover;background-position:center"></div>`).join('')}</div>`
+        ? `<div class="photo-grid">${(g => photos.map((p, i) => `<button class="ph photo" data-act="viewphoto" data-g="${g}" data-i="${i}" style="background-image:url('${p}');background-size:cover;background-position:center" aria-label="View photo ${i + 1}"></button>`).join(''))(gallery(photos))}</div>`
         : `<div class="empty">No photos yet. Log a visit to add the first.</div>`;
     } else {
       tabBody = vs.length ? vs.map(v => {
@@ -492,8 +766,12 @@
       }).join('') : `<div class="empty">No critiques yet. Be the first to throw shade.</div>`;
     }
     // Credit the Commons photographer whenever the hero is the Commons image (not a user's photo).
-    const heroIsCommons = !photoFor(b.id) && b.image;
-    const credit = heroIsCommons && b.credit
+    const heroPhoto = photoFor(b.id);
+    const heroSeedCredit = heroPhoto && PHOTO_CREDITS[heroPhoto];
+    const heroIsCommons = !heroPhoto && b.image;
+    const credit = heroSeedCredit
+      ? `<div class="credit">Photo: ${esc(heroSeedCredit.artist)}${heroSeedCredit.license ? ' · ' + esc(heroSeedCredit.license) : ''} · <a href="${esc(heroSeedCredit.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
+      : heroIsCommons && b.credit
       ? `<div class="credit">Photo: ${esc(b.credit.artist)}${b.credit.license ? ' · ' + esc(b.credit.license) : ''} · <a href="${esc(b.credit.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
       : heroIsCommons ? `<div class="credit"><a href="${esc(commonsURL(b.image, 1200))}" target="_blank" rel="noopener">Photo: Wikimedia Commons</a></div>` : '';
     const q = encodeURIComponent(b.name + (b.city ? ' ' + b.city : ''));
@@ -512,7 +790,7 @@
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
-        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
+        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -520,10 +798,28 @@
                  : `<div class="val">Not yet</div><div class="tiny muted">Log a visit to rate</div>`}
           </div>
         </div>
-        ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
+        ${liked.length ? `<div>
+          <div class="section-title">Popular features<span class="muted small">${vs.length} log${vs.length === 1 ? '' : 's'}</span></div>
+          <div class="stack-6">${liked.slice(0, 6).map(([l, n], i) => {
+            const photo = photoForAspect(b, l, i);
+            const thumbBg = photo
+              ? `background-image:url('${photo}');background-size:cover;background-position:center;`
+              : hatch(styleColor(b));
+            return `<div style="display:flex;align-items:center;gap:10px">
+              <div class="ph" style="width:44px;height:44px;border-radius:10px;flex-shrink:0;${thumbBg}"></div>
+              <div class="grow">
+                <div class="small" style="margin-bottom:4px">${esc(l)}</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="bar"><div style="width:${Math.round(n / vs.length * 100)}%"></div></div>
+                  <div class="tiny muted" style="flex-shrink:0">${n}</div>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}</div>
+        </div>` : ''}
         <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
         <div class="row-flex">
-          ${mv ? '' : `<button class="btn block ${want ? 'on' : ''}" data-act="want" data-id="${b.id}">${want ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Want to visit'}</button>`}
+          <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
         <div class="about">
@@ -548,34 +844,13 @@
     const u = user(uid);
     if (!u) return viewNotFound();
     const own = uid === state.me;
-    const vs = visitsBy(uid).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
-    const cities = new Set(vs.map(v => BY_ID[v.buildingId] && BY_ID[v.buildingId].city)).size;
-    const avg = vs.length ? (vs.reduce((s, v) => s + v.stars, 0) / vs.length).toFixed(1) : '—';
-
-    const top = vs.slice(0, 4).map((v, i) => ph(BY_ID[v.buildingId], { inner: `<span class="ph-label">${i + 1} · ${esc(BY_ID[v.buildingId].name)}</span>` })).join('');
-    const topFill = Array.from({ length: Math.max(0, 4 - vs.length) }, () => '<div class="ph"></div>').join('');
-
-    const tiers = [['S', 5, INK], ['A', 4, '#6b6b6b'], ['B', 3, '#8a8a8a'], ['C', 2, '#b0b0b0']].map(([t, s, c]) => {
-      const items = vs.filter(v => (s === 2 ? v.stars <= 2 : v.stars === s));
-      if (!items.length) return '';
-      return `<div class="tier"><div class="t" style="background:${c}">${t}</div>${items.map(v => ph(BY_ID[v.buildingId], { initials: true })).join('')}</div>`;
-    }).join('');
-
-    const styleCounts = {};
-    vs.forEach(v => { const b = BY_ID[v.buildingId]; if (b) styleCounts[b.style] = (styleCounts[b.style] || 0) + 1; });
-    const maxC = Math.max(1, ...Object.values(styleCounts));
-    const bars = Object.entries(styleCounts).sort((a, b) => b[1] - a[1]).map(([s, n]) =>
-      `<div style="display:flex;align-items:center;gap:10px"><div class="small" style="width:108px">${esc(s)}</div><div class="bar"><div style="width:${Math.round(n / maxC * 100)}%"></div></div><div class="small" style="width:18px;text-align:right">${n}</div></div>`).join('');
-
-    const looks = {};
-    vs.forEach(v => v.likes.forEach(l => { looks[l] = (looks[l] || 0) + 1; }));
-    const looksChips = Object.entries(looks).sort((a, b) => b[1] - a[1]).slice(0, 8)
-      .map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('');
-    const recent = visitsBy(uid).sort((a, b) => b.createdAt - a.createdAt).map(v => {
+    const vs = visitsBy(uid);
+    const cities = new Set(vs.map(v => BY_ID[v.buildingId] && (BY_ID[v.buildingId].city || BY_ID[v.buildingId].country))).size;
+    const recent = vs.slice().sort((a, b) => b.createdAt - a.createdAt).map(v => {
       const b = BY_ID[v.buildingId]; if (!b) return '';
       return `<button class="row" data-go="#/b/${b.id}">
         ${ph(b, { style: 'width:38px;height:38px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${v.note ? '“' + esc(v.note) + '”' : esc(b.city)}</div></div>
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${v.note ? esc(v.note) : esc(b.city)}</div></div>
         ${starsHTML(v.stars)}
       </button>`;
     }).join('');
@@ -599,17 +874,59 @@
       ${own ? '' : `<div class="pad" style="margin-top:14px">${following
         ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
-      <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
-        <div class="section"><div class="section-title">Top 4</div><div class="top4">${top}${topFill}</div></div>
-        <div class="section"><div class="section-title">Tier list<span class="small muted" style="font-weight:500">Avg ${avg}★</span></div>
-          <div class="stack-6">${tiers || '<div class="empty">No ratings yet.</div>'}</div></div>
-        ${looksChips ? `<div class="section"><div class="section-title">Looks for</div><div class="chips">${looksChips}</div></div>` : ''}
-        ${bars ? `<div class="section"><div class="section-title">By style</div><div class="stack-6" style="gap:10px">${bars}</div></div>` : ''}
-        <div><div class="section-title" style="padding:0 2px">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+      <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
+          <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
+        <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
     </div>${nav(own ? 'you' : '')}`;
+  }
+
+  // One blob per city (or country when a place has no city), sized by how many places were logged there.
+  function initBeenMap(uid) {
+    const el = document.getElementById('beenmap');
+    if (!el || !window.L) return;
+    const groups = {};
+    visitsBy(uid).forEach(v => {
+      const b = BY_ID[v.buildingId]; if (!b) return;
+      const key = b.city || b.country || 'Elsewhere';
+      const g = groups[key] = groups[key] || { key, n: 0, lat: 0, lng: 0 };
+      g.n++; g.lat += b.lat; g.lng += b.lng;
+    });
+    const list = Object.values(groups).map(g => ({ key: g.key, n: g.n, lat: g.lat / g.n, lng: g.lng / g.n }));
+    if (!list.length) return;
+    beenMap = window.L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false, worldCopyJump: true });
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 }).addTo(beenMap);
+    const layer = window.L.layerGroup().addTo(beenMap);
+    const max = Math.max(...list.map(g => g.n));
+    // Merge cities whose blobs would overlap at the current zoom; they split apart again as you zoom in.
+    const draw = () => {
+      if (!beenMap) return;
+      layer.clearLayers();
+      const clusters = [];
+      list.slice().sort((x, y) => y.n - x.n).forEach(g => {
+        const pt = beenMap.latLngToLayerPoint([g.lat, g.lng]);
+        const hit = clusters.find(c => c.pt.distanceTo(pt) < 64);
+        if (hit) { hit.n += g.n; hit.more++; hit.lat += g.lat * g.n; hit.lng += g.lng * g.n; hit.w += g.n; }
+        else clusters.push({ pt, key: g.key, n: g.n, more: 0, lat: g.lat * g.n, lng: g.lng * g.n, w: g.n });
+      });
+      const top = Math.max(max, ...clusters.map(c => c.n));
+      clusters.forEach(c => {
+        const size = Math.round(26 + 22 * Math.sqrt(c.n / top));
+        const label = c.more ? `${c.key} +${c.more}` : c.key;
+        window.L.marker([c.lat / c.w, c.lng / c.w], {
+          icon: window.L.divIcon({ className: '', html: `<div class="blob" style="width:${size}px;height:${size}px"><b>${c.n}</b><span class="blob-city">${esc(label)}</span></div>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }),
+          keyboard: false,
+        }).on('click', () => beenMap.setView([c.lat / c.w, c.lng / c.w], Math.min(beenMap.getZoom() + 3, 11))).addTo(layer);
+      });
+    };
+    beenMap.on('zoomend', draw);
+    if (list.length === 1) beenMap.setView([list[0].lat, list[0].lng], 10);
+    else beenMap.fitBounds(list.map(g => [g.lat, g.lng]), { padding: [36, 36], maxZoom: 10 });
+    draw();
+    setTimeout(() => beenMap && beenMap.invalidateSize(), 0);
   }
 
   function viewFollowList(uid, kind) {
@@ -635,7 +952,9 @@
     const u = me();
     return sheet('Edit profile', 1, 1,
       `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
-      `<div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
+      `<div class="field"><div class="label">Profile picture</div>
+         <div class="avatar-picker">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
+       <div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
        <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
        <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
          <div class="counter" id="ep-bio-count">${(u.bio || '').length} / 140</div></div>
@@ -721,6 +1040,7 @@
   function destroyMap() {
     if (map) { map.remove(); map = null; mapMarkers = {}; }
     if (pinMap) { pinMap.remove(); pinMap = null; }
+    if (beenMap) { beenMap.remove(); beenMap = null; }
     pinMode = false;
   }
   function setPinMode(on) {
@@ -885,6 +1205,10 @@
     if (!isToday) selDate.setHours(12, 0, 0, 0);
     const sun = sunTimesFor(b, selDate);
     if (!sun) return '';
+    // SunCalc returns true instants; Open-Meteo's hourly times are the place's wall clock. Put the sun times on the
+    // place's wall clock too, so markers line up and times read right wherever the viewer is (e.g. Chicago from NY).
+    const toPlace = t => (w && w.tz ? new Date(t.toLocaleString('en-US', { timeZone: w.tz })) : t);
+    Object.keys(sun).forEach(k => { sun[k] = toPlace(sun[k]); });
 
     const nowIcon = isToday
       ? (w && w.current ? WMO[w.current.weather_code] || '☀' : w && w.error ? '—' : '…')
@@ -1220,6 +1544,28 @@
     if (currentPath() === '/b/' + b.id) render();
   }
 
+  // Pull the other photos already sitting on a building's Wikipedia article, so "Popular features"
+  // doesn't have to repeat the single hero image for every row.
+  const BAD_IMG = /logo|icon|flag|symbol|locator|_map(_|\.)|\.svg$|\.ogv?$|\.pdf$|\.gif$/i;
+  async function fetchGallery(b) {
+    b.galleryDone = true;
+    try {
+      const title = decodeURIComponent((b.wiki.split('/wiki/')[1] || '').replace(/_/g, ' '));
+      if (!title) return;
+      const d = await fetchJSON('https://en.wikipedia.org/w/api.php?' + qs({
+        action: 'query', format: 'json', origin: '*', generator: 'images', gimlimit: 20,
+        prop: 'imageinfo', iiprop: 'url|size', iiurlwidth: 300, titles: title,
+      }));
+      const pages = Object.values((d.query && d.query.pages) || {});
+      const gallery = pages
+        .filter(p => p.imageinfo && p.imageinfo[0] && !BAD_IMG.test(p.title) && (p.imageinfo[0].width || 0) >= 300)
+        .map(p => p.imageinfo[0].thumburl || p.imageinfo[0].url)
+        .filter(Boolean)
+        .slice(0, 8);
+      if (gallery.length) { b.gallery = gallery; if (currentPath() === '/b/' + b.id) render(); }
+    } catch (e) { /* offline or rate-limited: features fall back to the hero photo */ }
+  }
+
   // ---------- Photo resize ----------
   function resizeImage(file, maxSide, cb) {
     const reader = new FileReader();
@@ -1238,6 +1584,53 @@
     reader.onerror = () => cb(null);
     reader.readAsDataURL(file);
   }
+
+  // ---------- Photo viewer ----------
+  let viewer = null;
+  function openViewer(list, i) {
+    closeViewer();
+    viewer = { list, i };
+    const el = document.createElement('div');
+    el.className = 'lightbox';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Photo viewer');
+    root.appendChild(el);
+    let x0 = null;
+    el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40) stepViewer(dx < 0 ? 1 : -1);
+    });
+    drawViewer();
+  }
+  function drawViewer() {
+    const el = root.querySelector('.lightbox');
+    if (!el || !viewer) return;
+    const { list, i } = viewer, url = list[i], c = PHOTO_CREDITS[url];
+    el.innerHTML = `
+      <div class="lb-top"><span class="lb-count">${list.length > 1 ? `${i + 1} / ${list.length}` : ''}</span>
+        <button class="btn-sq lb-close" data-act="lbclose" aria-label="Close">${icon('x')}</button></div>
+      <div class="lb-stage" data-act="lbclose"><img src="${url}" alt="Photo ${i + 1} of ${list.length}"></div>
+      ${list.length > 1 ? `<button class="btn-sq lb-nav prev" data-act="lbprev" aria-label="Previous photo">${icon('back')}</button>
+        <button class="btn-sq lb-nav next" data-act="lbnext" aria-label="Next photo">${icon('chevron')}</button>` : ''}
+      ${c ? `<div class="lb-credit">Photo: ${esc(c.artist)}${c.license ? ' · ' + esc(c.license) : ''} · <a href="${esc(c.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>` : ''}`;
+  }
+  function stepViewer(d) {
+    if (!viewer) return;
+    viewer.i = (viewer.i + d + viewer.list.length) % viewer.list.length;
+    drawViewer();
+  }
+  function closeViewer() {
+    const el = root.querySelector('.lightbox'); if (el) el.remove();
+    viewer = null;
+  }
+  document.addEventListener('keydown', e => {
+    if (!viewer) return;
+    if (e.key === 'Escape') closeViewer();
+    if (e.key === 'ArrowRight') stepViewer(1);
+    if (e.key === 'ArrowLeft') stepViewer(-1);
+  });
 
   // ---------- Confetti ----------
   function celebrate() {
@@ -1277,7 +1670,7 @@
     const cur = currentPath();
     for (let i = trail.length - 1; i >= 0; i--) {
       const p = trail[i];
-      if (p !== cur && !p.startsWith('/log') && !p.startsWith('/pin') && !p.startsWith('/editprofile') && !p.startsWith('/signin')) { trail.length = i; go('#' + p); return; }
+      if (p !== cur && !p.startsWith('/log') && !p.startsWith('/pin') && !p.startsWith('/editprofile') && !p.startsWith('/save') && !p.startsWith('/newlist') && !/\/invite$/.test(p) && !p.startsWith('/signin')) { trail.length = i; go('#' + p); return; }
     }
     go('#/feed');
   }
@@ -1293,18 +1686,24 @@
     if (trail.length > 50) trail.splice(0, trail.length - 50);
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
     if (seg[0] !== 'log') { draft = null; delArmed = false; }
+    if (seg[0] !== 'save' && seg[0] !== 'newlist') inviteSel = new Set();
 
     destroyMap();
+    galleries = [];
     let html, after;
     switch (seg[0]) {
       case 'signin': html = viewSignin(); break;
       case 'feed': html = viewHome('feed'); break;
       case 'map': html = viewHome('map'); after = initMap; break;
       case 'find': html = viewFind(qs); break;
-      case 'lists': html = viewLists(seg[1] === 'want' ? 'want' : 'been'); break;
+      case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
+      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
+      case 'save': html = viewSaveTo(seg[1]); break;
+      case 'newlist': html = viewNewList(); break;
+      case 'top': html = viewTopRated(); break;
       case 'b': html = viewBuilding(seg[1]); break;
-      case 'me': html = viewProfile(state.me); break;
-      case 'u': html = viewProfile(seg[1]); break;
+      case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
+      case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
       case 'followers': html = viewFollowList(seg[1], 'followers'); break;
       case 'following': html = viewFollowList(seg[1], 'following'); break;
       case 'editprofile': html = viewEditProfile(); break;
@@ -1338,6 +1737,7 @@
       state.users.push({ id, handle, name, bio: '' });
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
+      state.lists.filter(l => l.invitesNewUsers).forEach(l => l.members.push(id));
       state.me = id; save();
       Sound.success();
       go('#/feed');
@@ -1359,6 +1759,53 @@
       Sound.tap();
       if (i >= 0) { state.want.splice(i, 1); toast('Removed from Want to Visit'); }
       else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); toast('Saved to Want to Visit'); }
+      save(); render();
+    },
+    togglewant(d, el) {
+      const i = state.want.findIndex(w => w.userId === state.me && w.buildingId === d.id);
+      if (i >= 0) state.want.splice(i, 1); else state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() });
+      el.classList.toggle('on', i < 0);
+      Sound.tap(); save();
+    },
+    togglelist(d, el) {
+      const l = state.lists.find(x => x.id === d.list); if (!l) return;
+      const i = l.items.findIndex(it => it.buildingId === d.id);
+      if (i >= 0) l.items.splice(i, 1); else l.items.push({ buildingId: d.id, addedBy: state.me, createdAt: Date.now() });
+      el.classList.toggle('on', i < 0);
+      Sound.tap(); save();
+    },
+    newlistform() {
+      const f = document.getElementById('newlist');
+      f.hidden = !f.hidden;
+      if (!f.hidden) { f.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.getElementById('nl-name').focus(); }
+    },
+    pickinvite(d, el) {
+      if (inviteSel.has(d.u)) inviteSel.delete(d.u); else inviteSel.add(d.u);
+      el.classList.toggle('on', inviteSel.has(d.u));
+    },
+    createlist(d) {
+      const name = document.getElementById('nl-name').value.trim();
+      if (!name) return toast('Give the list a name');
+      const l = { id: 'l-' + Date.now().toString(36), name, ownerId: state.me, members: [state.me, ...inviteSel], items: [], createdAt: Date.now() };
+      if (d.bid) l.items.push({ buildingId: d.bid, addedBy: state.me, createdAt: Date.now() });
+      state.lists.push(l);
+      const n = inviteSel.size;
+      inviteSel = new Set();
+      save(); Sound.success();
+      if (d.bid) render(); else location.replace('#/list/' + l.id);
+      setTimeout(() => toast(`Created “${name}”` + (n ? ` · invited ${n}` : '')), 30);
+    },
+    invite(d, el) {
+      const l = state.lists.find(x => x.id === d.list); if (!l) return;
+      const i = l.members.indexOf(d.u);
+      if (i >= 0) l.members.splice(i, 1); else l.members.push(d.u);
+      el.classList.toggle('on', i < 0);
+      Sound.tap(); save();
+    },
+    noop() {},
+    unlist(d) {
+      const l = state.lists.find(x => x.id === d.list); if (!l) return;
+      l.items = l.items.filter(it => it.buildingId !== d.id);
       save(); render();
     },
     unwant(d) { state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === d.id)); save(); render(); },
@@ -1390,7 +1837,17 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
-    closeedit() { back(); },
+    viewphoto(d) { const list = galleries[+d.g]; if (list) openViewer(list, +d.i); },
+    lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
+    lbprev() { stepViewer(-1); },
+    lbnext() { stepViewer(1); },
+    closeedit() { epPhoto = undefined; back(); },
+    // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
+    pickavatar(d, el) {
+      epPhoto = d.src;
+      document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+      el.classList.add('on');
+    },
     saveprofile() {
       const u = me();
       const name = document.getElementById('ep-name').value.trim();
@@ -1400,6 +1857,8 @@
       if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
       if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
       u.name = name; u.handle = handle; u.bio = bio;
+      if (epPhoto) u.photo = epPhoto;
+      epPhoto = undefined;
       save(); Sound.success();
       back(); toast('Profile updated');
     },

@@ -1,6 +1,6 @@
 # throwShade — Product Spec
 
-**Status:** Hackathon build v0.8 · **Date:** 2026-09-26
+**Status:** Hackathon build v0.9 · **Date:** 2026-09-26
 
 > throwShade: a mobile app for logging, rating and sharing the buildings you visit, like Beli for architecture.
 
@@ -52,27 +52,29 @@ Five bottom tabs, with the mockups' square icons and a black centre "+".
 | Tab | Route | Purpose |
 | --- | --- | --- |
 | Home | `#/feed` | Feed, with the wordmark and a search button |
-| Lists | `#/lists` | Been and Want to Visit |
+| Lists | `#/lists` | Want to Visit and your custom (shared) lists |
 | + | `#/log` | Log flow (bottom sheet) |
-| Map | `#/map` | Same map as Home's Map toggle |
+| Map | `#/map` | Map of places with type and status filters; drop a pin to add a place |
 | You | `#/me` | Your profile |
 
-Other routes: `#/find` (search buildings and people), `#/b/<id>` (building), `#/u/<id>` (someone's profile), `#/signin`.
+Other routes: `#/find` (search places and people), `#/b/<id>` (place), `#/u/<id>` (someone's profile), `#/save/<id>` (save sheet), `#/list/<id>` and `#/list/<id>/invite`, `#/newlist`, `#/followers/<id>`, `#/following/<id>`, `#/editprofile`, `#/pin/<lat>,<lng>`, `#/signin`.
 
 ## 6. Screens
 
 | Screen | What it shows |
 | --- | --- |
 | Sign in | Wordmark; create a user (display name + handle) or continue as a seeded critic |
-| Feed | Cards: avatar, "@maya rated **Salk Institute**", star score, image, note, "+ Want to Visit" / Open |
-| Map | Filter pills (All, Been, Want to Visit, Friends' picks); greyscale map; pins coloured by style (filled = been, ring = want); style legend; Locate; **Pin** (or long-press) to add a building; bottom building card |
+| Feed | Exactly what each person posted: avatar, "@maya rated **Salk Institute**", stars, critique, chosen aspects, their own photos; Save / Details |
+| Map | Filter pills (All / Buildings / Bridges / Art / Spots, then Been / Want to Visit / Friends' picks); greyscale map; pins coloured by style (filled = been, ring = want); style legend; Locate; **Pin** (or long-press) to add a building; bottom building card |
 | What's here? (pin) | Mini map + coordinates; buildings already in the app within 120 m; OpenStreetMap buildings at the spot (name, type, address, Wikipedia badge); "+ Name it yourself" form (name, architect, year, style) → rate it |
 | Find | Search field; Buildings tab (nearby when empty) and People tab with Follow buttons |
 | Log 1/2 — Throw Shade | Bottom sheet: search + nearby buildings with distance |
-| Log 2/2 — Your critique | Five square star buttons with caption (Throwing shade → Pilgrimage-worthy), date visited, one photo, 280-character critique, Post |
-| Building | Photo (user's, else Wikimedia Commons with credit line), name, architect · year · typology · city, style chip, Community / Your rating, Throw Shade, Want to Visit, Directions, About (Wikipedia intro, address, coordinates, links to Wikipedia / OpenStreetMap / ArchDaily search / Dezeen search), Critiques / Photos tabs |
-| Lists | Been (Top rated / Recent) and Want to Visit |
-| Profile | Avatar, stats (Logged, Cities, Followers, Following), Follow button, Top 4, tier list (S = 5★ … C = ≤2★), By style bars, critiques; Switch account and Reset demo data on your own profile |
+| Log 2/2 — Your critique | Five star buttons with caption (Throwing shade → Pilgrimage-worthy), "What stood out?" aspect chips, date visited, up to 4 photos, 280-character critique, Post; Delete when editing |
+| Building | Photo (user's, else Wikimedia Commons with credit line), name, architect · year · typology · city, style chip, best-time-to-visit card (weather, golden hour, 5-day forecast), Community / Your rating, what people like, Throw Shade, Save, Directions, About (Wikipedia intro, address, coordinates, links to Wikipedia / OpenStreetMap / ArchDaily search / Dezeen search), Critiques / Photos tabs |
+| Lists | Want to Visit (private) plus custom lists, each with a thumbnail, place count and member avatars; "+" to create a list |
+| Save sheet | "Save" on any feed post or place opens it: tick Want to Visit or any of your lists, or create a new list and invite people inline |
+| List | Places with who added them; members row; invite sheet (members can view and add places) |
+| Profile | Avatar (tap to change photo), edit profile, stats (Logged, Cities, Followers, Following → lists), a "Where you've been" map with a numbered blob per city that merges when zoomed out, and critiques |
 
 ## 7. Data
 
@@ -84,6 +86,7 @@ Everything lives in the browser's `localStorage` under the key `throwingshade.v1
 | `follows` | [followerId, followeeId] |
 | `visits` | id, userId, buildingId, stars (1–5), note, likes (aspect names), photos (0–4 resized JPEG data URLs), visitedOn, createdAt |
 | `want` | userId, buildingId, createdAt |
+| `lists` | id, name, ownerId, members (user ids), items [{buildingId, addedBy, createdAt}], createdAt |
 | `places` | Places users pinned: id (`osm-way-…` or `pin-…`), kind, name, architect, year, typology, style, city, country, lat, lng, address, osm, qid, image, credit, blurb, wiki, source (`osm` / `user`), addedBy, createdAt |
 
 - Buildings are static in `app/data.js` (59 buildings, weighted to New York).
@@ -108,6 +111,8 @@ Three sources, merged at load in `app.js`:
 python tools/fetch_wikidata.py --global 0 --local 400 --radius 20 --city Chicago   # Chicago (current)
 python tools/fetch_wikidata.py --global 450 --local 400 --radius 20 --city Chicago # + worldwide
 ```
+
+**Stand-in photos for seeded posts (`tools/fetch_seed_photos.py`).** For every place a seeded critic posted about, pulls up to 4 photos from the place's Wikimedia Commons category (Wikidata P373) into `app/seed-photos.js`. Seeded posts show 0–4 of them (two critics posting the same place get different shots), each with a photographer/licence credit under the photos. Photos people upload themselves are never replaced.
 
 **Drop a pin (runtime).**
 1. Overpass API: buildings within 25 m of the pin, named buildings within 90 m, plus artworks, bridges, parks, squares, fountains, piers and attractions nearby; each result is tagged building / bridge / art / spot. Two public servers, 12 s timeout each.
