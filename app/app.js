@@ -182,6 +182,14 @@
     BUILDINGS.forEach(b => { if (b.city) (byCity[b.city] = byCity[b.city] || []).push(b); });
     const topCity = Object.entries(byCity).sort((a, b) => b[1].length - a[1].length)[0];
     if (topCity && topCity[1].length >= 3) guides.push({ title: topCity[0], sub: `${topCity[1].length} places`, items: rankByRating(topCity[1]) });
+    const byArchitect = {};
+    BUILDINGS.forEach(b => { if (b.architect) (byArchitect[b.architect] = byArchitect[b.architect] || []).push(b); });
+    Object.entries(byArchitect).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([architect, list]) => guides.push({ title: architect, sub: `${list.length} places`, items: rankByRating(list) }));
+    const byDecade = {};
+    BUILDINGS.forEach(b => { if (b.year) { const d = `${Math.floor(b.year / 10) * 10}s`; (byDecade[d] = byDecade[d] || []).push(b); } });
+    Object.entries(byDecade).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([decade, list]) => guides.push({ title: decade, sub: `${list.length} places`, items: rankByRating(list) }));
     return guides;
   }
   function rankByRating(list) {
