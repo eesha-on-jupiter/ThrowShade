@@ -53,7 +53,7 @@ Five bottom tabs, with the mockups' square icons and a black centre "+".
 | --- | --- | --- |
 | Home | `#/feed` | Feed, with the wordmark |
 | Lists | `#/lists` | Want to Visit and your custom (shared) lists |
-| Search (centre) | `#/find` | One search for architecture (places, architects, cities) and people; + on a result rates it |
+| Search (centre) | `#/find` | Two tabs, each searched on its own: **Architecture** (places, architects, cities; + on a result rates it) and **Users** (all users, with Follow) |
 | Map | `#/map` | Map of places with type and status filters; drop a pin to add a place |
 | You | `#/me` | Your profile |
 

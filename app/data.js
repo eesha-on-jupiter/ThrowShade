@@ -91,6 +91,11 @@ window.TS_SEED_USERS = [
   { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.', photo: 'avatars/avatar_26.png' },
   { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.', photo: 'avatars/avatar_29.png' },
   { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.', photo: 'avatars/avatar_24.png' },
+  // The throwShade team
+  { id: 'u-eesha', handle: 'eesha.j', name: 'Eesha Jain', bio: 'throwShade team' },
+  { id: 'u-shandon', handle: 'shandon.h', name: 'Shandon Herft', bio: 'throwShade team' },
+  { id: 'u-achyuth', handle: 'achyuth.p', name: 'Achyuth Prabhakar', bio: 'throwShade team' },
+  { id: 'u-yenhsing', handle: 'yenhsing.c', name: 'Yenhsing Cheng', bio: 'throwShade team' },
 ];
 
 // [userId, buildingId, stars, note, hoursAgo]
