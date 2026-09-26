@@ -652,10 +652,13 @@
 
   function viewEditProfile() {
     const u = me();
+    // 15 random presets, always including the current one so it shows as selected.
+    const picks = PRESET_AVATARS.filter(p => p !== u.photo).sort(() => Math.random() - .5).slice(0, PRESET_AVATARS.includes(u.photo) ? 14 : 15);
+    if (PRESET_AVATARS.includes(u.photo)) picks.splice(Math.floor(Math.random() * 15), 0, u.photo);
     return sheet('Edit profile', 1, 1,
       `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
       `<div class="field"><div class="label">Profile picture</div>
-         <div class="avatar-picker">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
+         <div class="avatar-picker">${picks.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
        <div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
        <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
        <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
