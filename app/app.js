@@ -148,12 +148,16 @@
       const friendVs = visitsFor(b.id).filter(v => fids.has(v.userId));
       const friendAvg = friendVs.length ? friendVs.reduce((s, v) => s + v.stars, 0) / friendVs.length : 0;
       const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
-      let score = 0, reason = null;
-      if (friendAvg >= 4) { score += friendAvg * 3; reason = friendVs.length > 1 ? `${friendVs.length} friends loved it` : 'A friend loved it'; }
-      if (!reason && favStyles.has(b.style)) { score += 4; reason = `You tend to love ${b.style}`; }
-      if (!reason && d < 3) { score += 2; reason = 'Right nearby'; }
+      let score = 0, reason = null, group = null;
+      if (friendAvg >= 4) {
+        score += friendAvg * 3; group = 'friends';
+        const one = friendVs.length === 1 && user(friendVs[0].userId);
+        reason = one ? `@${one.handle} gave it ${friendVs[0].stars}★` : `${friendVs.length} friends loved it`;
+      }
+      if (!reason && favStyles.has(b.style)) { score += 4; group = 'style:' + b.style; reason = `You tend to love ${b.style}`; }
+      if (!reason && d < 3) { score += 2; group = 'nearby'; reason = 'Right nearby'; }
       score += Math.max(0, 2 - d / 15);
-      return { b, score, reason, d };
+      return { b, score, reason, group, d };
     }).filter(x => x.reason);
     scored.sort((x, y) => y.score - x.score);
     if (scored.length < (limit || 12)) {
@@ -161,11 +165,15 @@
       topRated(40).forEach(x => {
         if (scored.length >= (limit || 12)) return;
         if (visited.has(x.b.id) || already.has(x.b.id)) return;
-        scored.push({ b: x.b, score: 0, reason: 'Highly rated', d: distMap.get(x.b.id) });
+        scored.push({ b: x.b, score: 0, reason: 'Highly rated overall', group: 'top', d: distMap.get(x.b.id) });
         already.add(x.b.id);
       });
     }
     return scored.slice(0, limit || 12);
+  }
+  function recGroupLabel(g) {
+    if (g.startsWith('style:')) return `More ${g.slice(6)} for you`;
+    return { friends: 'Friends loved these', nearby: 'Near you', top: 'Highly rated' }[g] || 'Recommended';
   }
   // Guides: shelves grouped by style, kind, city, architect and decade — built from whatever data
   // already exists. Each shelf carries a dim/key so it can filter the full list ("See all") and so
@@ -642,12 +650,24 @@
       <button class="${tab === 'guides' ? 'on' : ''}" data-go="#/lists/guides">Guides</button></div>`;
     let body;
     if (tab === 'recs') {
-      const recs = recsFor(state.me, 12);
-      body = `<div class="stack-6 pad">${recs.length ? recs.map(x => `<div class="row" data-go="#/b/${x.b.id}">
-          ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
-          <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
-          <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
-        </div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
+      const recs = recsFor(state.me, 16);
+      const groups = [];
+      const byGroup = {};
+      recs.forEach(x => {
+        if (!byGroup[x.group]) { byGroup[x.group] = { label: recGroupLabel(x.group), items: [] }; groups.push(byGroup[x.group]); }
+        byGroup[x.group].items.push(x);
+      });
+      body = `<div class="pad">${groups.length ? groups.map(g => `
+        <div class="section-title" style="margin-top:8px">${esc(g.label)}</div>
+        <div class="stack-6" style="margin-bottom:8px">${g.items.map(x => {
+          const a = avgFor(x.b.id);
+          return `<div class="row" data-go="#/b/${x.b.id}">
+            ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+            <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
+            ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
+            <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
+          </div>`;
+        }).join('')}</div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
     } else if (tab === 'guides') {
       const guides = buildGuides(state.me);
       body = `<div class="pad">${guides.length ? guides.map(g => `
