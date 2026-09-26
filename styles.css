@@ -334,15 +334,14 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .leaflet-tile-pane { filter: grayscale(1) contrast(.75) brightness(1.16); opacity: .85; }
 .leaflet-control-attribution { font-size: 9px !important; background: rgba(255,255,255,.75) !important; }
 .leaflet-control-zoom { display: none; }
-.map-legend { margin: 0 20px 10px; font-size: 11px; }
-.map-legend .legend-toggle { font-weight: 500; font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
-.map-legend .legend-toggle svg:last-child { margin-left: -2px; }
-.map-legend .legend-items { margin-top: 8px; background: var(--fill); border-radius: 12px; padding: 10px 12px; }
-.map-legend .legend-items.closed { display: none; }
-.map-locate, .map-pinbtn { position: absolute; right: 12px; z-index: 5; background: var(--paper); box-shadow: var(--float); }
-.map-locate { top: 12px; }
-.map-pinbtn { top: 60px; }
+.map-filters { margin: 0 20px 12px; font-size: 11px; background: var(--fill); border-radius: 12px; padding: 12px; }
+.map-filters .legend-items { display: flex; flex-direction: column; }
+.map-locate, .map-pinbtn, .map-heatbtn { position: absolute; right: 12px; z-index: 5; background: var(--paper); box-shadow: var(--float); }
+.map-heatbtn { top: 12px; }
+.map-locate { top: 60px; }
+.map-pinbtn { top: 108px; }
 .map-pinbtn.on { background: var(--ink); color: var(--paper); }
+.map-heatbtn.on { background: #ff4d6d; color: #fff; border-color: #ff4d6d; }
 .map-hint {
   position: absolute; left: 12px; top: 60px; z-index: 6;
   background: var(--ink); color: var(--paper); padding: 7px 12px; border-radius: 999px;
@@ -360,6 +359,7 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .pin.want { background: var(--paper); border: 3px solid var(--c); }
 .pin.other { width: 12px; height: 12px; opacity: .55; margin: 4px; border-width: 1.5px; }
 .pin.sel { width: 28px; height: 28px; border: 3px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink), 0 3px 10px rgba(0,0,0,.25); margin: -4px; opacity: 1; }
+.pin.dim:not(.sel) { opacity: .45; box-shadow: none; }
 .pin.me { background: #3478f6; width: 14px; height: 14px; border: 3px solid var(--paper); box-shadow: 0 0 0 5px rgba(52,120,246,.15); margin: 3px; }
 
 /* ---------- Pin sheet ---------- */
