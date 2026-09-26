@@ -306,6 +306,13 @@
     document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
     const pv = document.getElementById('su-avatar');
     if (pv) pv.style.backgroundImage = `url('${src}')`;
+    toggleAvatarMenu(false);
+  }
+  function toggleAvatarMenu(open) {
+    const m = document.getElementById('su-avatar-menu');
+    if (!m) return;
+    m.hidden = open === undefined ? !m.hidden : !open;
+    document.querySelector('[data-act="toggleavatars"]').setAttribute('aria-expanded', String(!m.hidden));
   }
   const trail = [];
 
@@ -317,12 +324,18 @@
         <div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)}</div></div>
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
-    const pic = pickedPhoto ? ` style="background-image:url('${pickedPhoto}')"` : '';
+    // New sign-ups start with a random preset; the camera opens the full menu.
+    if (!pickedPhoto) pickedPhoto = PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)];
     return `<div class="screen"><div class="signin">
       <div class="signin-avatar">
-        <label class="avatar-edit" for="su-avatar-in" aria-label="Upload a profile photo"><div class="avatar lg" id="su-avatar"${pic}></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
-        <input id="su-avatar-in" type="file" accept="image/*" hidden data-change="suavatar">
-        <div class="avatar-picker strip">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${pickedPhoto === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div>
+        <button class="avatar-edit" data-act="toggleavatars" aria-label="Choose a profile picture" aria-expanded="false"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></button>
+        <div class="avatar-menu" id="su-avatar-menu" hidden>
+          <div class="avatar-picker">
+            <label class="avatar-pick avatar-upload" for="su-avatar-in" aria-label="Upload a photo">${icon('camera')}</label>
+            ${PRESET_AVATARS.map(p => `<button class="avatar-pick ${pickedPhoto === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}
+          </div>
+          <input id="su-avatar-in" type="file" accept="image/*" hidden data-change="suavatar">
+        </div>
       </div>
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
@@ -1352,6 +1365,7 @@
     closelog() { draft = null; back(); },
     closeedit() { pickedPhoto = undefined; back(); },
     // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
+    toggleavatars() { toggleAvatarMenu(); },
     pickavatar(d, el) {
       setPicked(d.src);
       el.classList.add('on');
