@@ -115,6 +115,31 @@ def around(lat, lng, radius_km, n):
     return [qid(r['item']['value']) for r in sparql(q)]
 
 
+# Non-building kinds pulled around the demo location, by Wikidata class (instance of, or a subclass of, these).
+KIND_CLASSES = {
+    'bridge': ['Q12280'],                                                 # bridge
+    'art': ['Q860861', 'Q179700', 'Q219423', 'Q20437094', 'Q557141'],     # sculpture, statue, mural, installation, public art
+    'spot': ['Q22698', 'Q174782', 'Q483453', 'Q863454', 'Q1107656'],      # park, square, fountain, pier, garden
+}
+KIND_DEFAULT_TYPE = {'building': 'Building', 'bridge': 'Bridge', 'art': 'Public art', 'spot': 'Public space'}
+KIND_UNKNOWN_MAKER = {'building': 'Unknown architect', 'bridge': 'Unknown engineer', 'art': 'Unknown artist', 'spot': ''}
+
+
+def around_kind(lat, lng, radius_km, n, classes, need_image):
+    values = ' '.join('wd:' + c for c in classes)
+    img = '?item wdt:P18 ?img.' if need_image else ''
+    q = f"""SELECT DISTINCT ?item ?sitelinks WHERE {{
+      SERVICE wikibase:around {{
+        ?item wdt:P625 ?coord.
+        bd:serviceParam wikibase:center "Point({lng} {lat})"^^geo:wktLiteral; wikibase:radius "{radius_km}".
+      }}
+      VALUES ?cls {{ {values} }}
+      ?item wdt:P31/wdt:P279* ?cls; wikibase:sitelinks ?sitelinks.
+      {img}
+    }} ORDER BY DESC(?sitelinks) LIMIT {n}"""
+    return [qid(r['item']['value']) for r in sparql(q)]
+
+
 def details(qids):
     """Fetch the fields we need for a batch of items. Returns {qid: record}."""
     out = {}
@@ -122,10 +147,11 @@ def details(qids):
         batch = qids[i:i + 60]
         values = ' '.join('wd:' + q for q in batch)
         q = f"""SELECT ?item ?itemLabel ?itemDescription ?archLabel ?opened ?inception ?styleLabel ?typeLabel ?coord
-                       ?image ?placeLabel ?countryLabel ?article ?sitelinks ?service ?started WHERE {{
+                       ?image ?placeLabel ?countryLabel ?article ?sitelinks ?service ?started ?creatorLabel WHERE {{
           VALUES ?item {{ {values} }}
           ?item wdt:P625 ?coord; wikibase:sitelinks ?sitelinks.
           OPTIONAL {{ ?item wdt:P84 ?arch }}
+          OPTIONAL {{ ?item wdt:P170 ?creator }}
           OPTIONAL {{ ?item wdt:P1619 ?opened }}
           OPTIONAL {{ ?item wdt:P571 ?inception }}
           OPTIONAL {{ ?item wdt:P729 ?service }}
@@ -141,7 +167,7 @@ def details(qids):
         for r in sparql(q):
             k = qid(r['item']['value'])
             rec = out.setdefault(k, {'qid': k, 'archs': [], 'styles': [], 'types': [], 'places': [], 'countries': [],
-                                     'images': [], 'years': []})
+                                     'images': [], 'years': [], 'creators': []})
             v = lambda key: r.get(key, {}).get('value')
             rec['name'] = v('itemLabel')
             rec['desc'] = v('itemDescription')
@@ -150,7 +176,7 @@ def details(qids):
             m = re.match(r'Point\(([-\d.eE]+) ([-\d.eE]+)\)', v('coord') or '')
             if m:
                 rec['lng'], rec['lat'] = round(float(m.group(1)), 5), round(float(m.group(2)), 5)
-            for key, field in (('archLabel', 'archs'), ('styleLabel', 'styles'), ('typeLabel', 'types'),
+            for key, field in (('archLabel', 'archs'), ('creatorLabel', 'creators'), ('styleLabel', 'styles'), ('typeLabel', 'types'),
                                ('placeLabel', 'places'), ('countryLabel', 'countries')):
                 val = v(key)
                 if val and not re.fullmatch(r'Q\d+', val) and val not in rec[field]:
@@ -182,31 +208,36 @@ def bucket_style(styles, year):
     return 'Modernist' if year < 1990 else 'Contemporary'
 
 
-def pick_type(types):
+def pick_type(types, kind='building'):
+    if kind != 'building':
+        specific = [t for t in types if t.lower() not in GENERIC_TYPES and not re.search(r'organi[sz]ation|company', t, re.I)]
+        t = (specific or [KIND_DEFAULT_TYPE[kind]])[0]
+        return t[:1].upper() + t[1:]
     specific = [t for t in types if t.lower() not in GENERIC_TYPES and not SKIP_TYPES.search(t)]
     specific.sort(key=lambda t: 0 if BUILDINGISH.search(t) else 1)
     t = (specific or types or ['building'])[0]
     return t[:1].upper() + t[1:]
 
 
-def shape(rec):
-    """Wikidata record -> app building (or None if unusable)."""
+def shape(rec, kind='building'):
+    """Wikidata record -> app place (or None if unusable). kind: building | bridge | art | spot."""
     name = rec.get('name')
     if not name or re.fullmatch(r'Q\d+', name) or 'lat' not in rec:
         return None
-    if rec['types'] and all(SKIP_TYPES.search(t) for t in rec['types']):
+    if kind == 'building' and rec['types'] and all(SKIP_TYPES.search(t) for t in rec['types']):
         return None
     if any(GONE_TYPES.search(t) for t in rec['types']):
         return None
     years = sorted(rec['years'])
     year = years[0][1] if years else None
-    archs = rec['archs'][:2]
+    makers = (rec['archs'] or rec['creators'])[:2]
     return {
         'id': 'wd-' + rec['qid'],
+        'kind': kind,
         'name': name,
-        'architect': ' · '.join(archs) if archs else 'Unknown architect',
+        'architect': ' · '.join(makers) if makers else KIND_UNKNOWN_MAKER[kind],
         'year': year if year is not None else '',
-        'typology': pick_type(rec['types']),
+        'typology': pick_type(rec['types'], kind),
         'style': bucket_style(rec['styles'], year),
         'styleSource': ', '.join(rec['styles'][:3]),
         'city': next((p for p in rec['places'] if not BAD_PLACES.search(p)), ''),
@@ -362,6 +393,7 @@ def main():
     ap.add_argument('--global', dest='n_global', type=int, default=450)
     ap.add_argument('--local', dest='n_local', type=int, default=250)
     ap.add_argument('--radius', type=float, default=12)
+    ap.add_argument('--per-kind', dest='n_kind', type=int, default=80, help='bridges / art / spots to pull around the demo location (0 = none)')
     ap.add_argument('--city', default='', help='fallback city for local buildings with no usable city')
     args = ap.parse_args()
 
@@ -377,10 +409,24 @@ def main():
     l = around(lat, lng, args.radius, args.n_local)
     print(f'  {len(l)} candidates')
 
-    recs = details(list(dict.fromkeys(g + l)))
-    shaped = {k: s for k, s in ((k, shape(r)) for k, r in recs.items()) if s}
+    # Bridges, art and spots. A more specific kind wins over "building" (e.g. a bridge that also has an architect).
+    kind_of = {q: 'building' for q in g + l}
+    kind_ids = []
+    for kind in ('spot', 'art', 'bridge'):
+        if args.n_kind <= 0:
+            break
+        print(f'Querying {kind} within {args.radius} km…')
+        ids = around_kind(lat, lng, args.radius, args.n_kind, KIND_CLASSES[kind], need_image=kind != 'bridge')
+        print(f'  {len(ids)} candidates')
+        for q in ids:
+            kind_of[q] = kind
+        kind_ids += ids
+
+    recs = details(list(dict.fromkeys(g + l + kind_ids)))
+    shaped = {k: s for k, s in ((k, shape(r, kind_of.get(k, 'building'))) for k, r in recs.items()) if s}
     glob = [shaped[q] for q in g if q in shaped][:args.n_global]
-    local = [shaped[q] for q in l if q in shaped][:args.n_local]
+    local = [shaped[q] for q in dict.fromkeys(l + kind_ids) if q in shaped]
+    local = [b for b in local if b['kind'] != 'building'] + [b for b in local if b['kind'] == 'building'][:args.n_local]
     for b in local:
         if not b['city'] and args.city:
             b['city'] = args.city
@@ -450,7 +496,7 @@ def main():
                'wiki': b.get('wiki'), 'blurb': intros.get(b.get('wiki')) or (b.get('desc') or '').capitalize() or None,
                'styleSource': b.get('styleSource') or None}
         if keep_basics:
-            out = {k: b[k] for k in ('id', 'name', 'architect', 'year', 'typology', 'style', 'city', 'country', 'lat', 'lng')} | out
+            out = {k: b[k] for k in ('id', 'kind', 'name', 'architect', 'year', 'typology', 'style', 'city', 'country', 'lat', 'lng')} | out
         return {k: v for k, v in out.items() if v not in (None, '')}
 
     payload = {
@@ -464,6 +510,10 @@ def main():
         f.write('window.TS_WIKIDATA = ')
         json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
         f.write(';\n')
+    kinds = {}
+    for b in payload['buildings']:
+        kinds[b['kind']] = kinds.get(b['kind'], 0) + 1
+    print('  by kind:', kinds)
     n_img = sum(1 for b in payload['buildings'] if b.get('image')) + sum(1 for b in payload['enrich'].values() if b.get('image'))
     print(f'Wrote {OUT_JS}: {len(payload["enrich"])}/{len(seeds)} seeds enriched, {len(payload["buildings"])} new buildings, '
           f'{n_img} with photos, {os.path.getsize(OUT_JS) // 1024} KB')

@@ -356,3 +356,30 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
   display: flex; align-items: center; gap: 10px; animation: toast-in .2s ease-out;
 }
 @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- Feed posts: rating, liked aspects, the poster's own photos ---------- */
+.rating-line { display: flex; align-items: center; gap: 8px; }
+.chips.likes .chip { font-size: 11.5px; padding: 3px 10px; }
+.chip .count { font-weight: 600; color: var(--text-3); margin-left: 2px; }
+.shots { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; }
+.shots .shot { background-color: var(--ph); background-size: cover; background-position: center; min-height: 0; }
+.shots.n1 { grid-template-columns: 1fr; height: 240px; }
+.shots.n2 { grid-template-columns: 1fr 1fr; height: 180px; }
+.shots.n3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; height: 220px; }
+.shots.n3 .shot:first-child { grid-row: span 2; }
+.shots.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 240px; }
+.row .shots, .grow > .shots { margin-top: 6px; height: 120px; }
+
+/* ---------- Log sheet: aspects + photo row ---------- */
+.chips.aspects .pill { height: 32px; padding: 0 12px; }
+.photo-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-row .ph { border-radius: 10px; }
+.photo-row .rm { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; background: rgba(255,255,255,.92); }
+.photo-row .photo-add { width: 72px; height: 72px; }
+
+/* ---------- Map: kind filter + pin shapes ---------- */
+.pill-sep { flex: 0 0 1px; background: var(--line-2); margin: 6px 2px; }
+.pin.k-bridge { border-radius: 3px; }
+.pin.k-art { border-radius: 2px; transform: rotate(45deg) scale(.9); }
+.pin.k-spot { background: radial-gradient(circle, var(--paper) 0 2.5px, var(--c) 3px); }
+.pin.k-spot.want { background: var(--paper); }
