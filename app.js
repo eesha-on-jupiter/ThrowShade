@@ -687,11 +687,14 @@
           <div class="rail-meta muted">${esc(b.city || '')}</div>
         </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
     } else {
-      const want = state.want.filter(w => w.userId === state.me).length;
+      const wantItems = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
+      const want = wantItems.length;
+      const wantCover = want && BY_ID[wantItems[0].buildingId];
       const lists = myLists();
       body = `<div class="stack-6 pad">
+        ${!want && !lists.length ? `<div class="empty">Lists are how you collect places — start with Want to Visit, or make your own to share with friends, like "Chicago rooftop bars."</div>` : ''}
         <button class="row" data-go="#/list/want">
-          <div class="list-icon">${icon('bookmark')}</div>
+          ${wantCover ? ph(wantCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`}
           <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
           ${icon('chevron', 'sm')}
         </button>
