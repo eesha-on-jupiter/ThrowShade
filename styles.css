@@ -195,8 +195,10 @@ button:active { transform: translateY(1px); }
 .visit-note .dot-live { width: 6px; height: 6px; border-radius: 50%; background: #7a8b2e; flex-shrink: 0; margin-top: 5px; animation: pulse 2s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 .forecast-row { display: flex; gap: 8px; overflow-x: auto; }
-.forecast-day { flex: 1; min-width: 58px; border: 1.5px solid var(--line); border-radius: 6px; padding: 8px 6px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.forecast-day { flex: 1; min-width: 58px; border: 1.5px solid var(--line); border-radius: 6px; padding: 8px 6px; text-align: center; display: flex; flex-direction: column; gap: 4px; background: var(--paper); }
 .forecast-day.best { border-color: var(--ink); border-width: 2px; background: var(--soft); }
+.forecast-day.sel { background: var(--ink); }
+.forecast-day.sel .d, .forecast-day.sel .t, .forecast-day.sel .g { color: var(--paper); }
 .forecast-day .d { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
 .forecast-day.best .d { color: var(--ink); }
 .forecast-day .icon { font-size: 16px; }
