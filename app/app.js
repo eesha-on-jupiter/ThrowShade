@@ -115,6 +115,8 @@
     share: '<circle cx="6" cy="12" r="2.1"/><circle cx="18" cy="6" r="2.1"/><circle cx="18" cy="18" r="2.1"/><path d="M8 10.8 16 7M8 13.2l8 3.8"/>',
     camera: '<path d="M4 8.5h3.2L9 5.5h6l1.8 3H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/>',
     edit: '<path d="M4 20l1-4.2L15.8 5A2 2 0 0 1 18.6 5l0.4.4A2 2 0 0 1 19 8.2L8.2 19z"/><path d="M14 6.8l3.2 3.2"/>',
+    arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    heart: '<path d="M12 20.5S3.5 15 3.5 8.8a4.8 4.8 0 0 1 8.5-3 4.8 4.8 0 0 1 8.5 3c0 6.2-8.5 11.7-8.5 11.7z"/>',
   };
   function icon(name, size) {
     const s = size || 20;
@@ -252,20 +254,28 @@
     if (!u || !b) return '';
     const mine = v.userId === state.me;
     const mv = myVisit(b.id);
+    const want = isWant(state.me, b.id);
     let action;
     if (mine) action = `<button class="btn block" data-go="#/log/${b.id}">Edit critique</button>`;
     else if (mv) action = `<button class="btn block" data-go="#/b/${b.id}">Been · you gave ${mv.stars}★</button>`;
-    else action = `<button class="btn block ${isWant(state.me, b.id) ? 'on' : ''}" data-act="want" data-id="${b.id}">${isWant(state.me, b.id) ? '✓ On Want to Visit' : '+ Want to Visit'}</button>`;
-    return `<div class="card">
-      <div class="card-head">
+    else action = `<button class="btn-sq thin feed-heart ${want ? 'on' : ''}" data-act="want" data-id="${b.id}" aria-label="${want ? 'Remove from Want to Visit' : 'Want to Visit'}">${icon('heart', 18)}</button>`;
+    return `<article class="feed-card">
+      <div class="feed-head">
         ${avatar(u)}
-        <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(b.city)} · ${ago(v.createdAt)}</div></div>
+        <div class="grow">
+          <b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b>
+          <div class="tiny muted">${ago(v.createdAt)} · ${esc(b.city)}</div>
+        </div>
         ${scoreHTML(v.stars)}
       </div>
-      ${ph(b, { photo: v.photo, w: 720, style: 'height:180px', label: phLabel(b) })}
-      ${v.note ? `<div class="quote">“${esc(v.note)}”</div>` : ''}
-      <div class="row-flex">${action}<button class="btn" style="width:64px" data-go="#/b/${b.id}">Open</button></div>
-    </div>`;
+      ${ph(b, { photo: v.photo, w: 720, cls: 'feed-photo', label: phLabel(b), go: false })}
+      <div class="feed-body">
+        <div class="feed-title" data-go="#/b/${b.id}">${esc(b.name)}</div>
+        <div class="small muted">${esc(byLine(b))}</div>
+        ${v.note ? `<div class="feed-note">“${esc(v.note)}”</div>` : ''}
+        <div class="feed-actions">${action}<div class="grow"></div><button class="btn-sq thin" style="width:44px" data-go="#/b/${b.id}" aria-label="Open">${icon('arrowRight', 18)}</button></div>
+      </div>
+    </article>`;
   }
 
   function viewHome(tab) {
