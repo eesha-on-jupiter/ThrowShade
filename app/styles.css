@@ -383,3 +383,21 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .pin.k-art { border-radius: 2px; transform: rotate(45deg) scale(.9); }
 .pin.k-spot { background: radial-gradient(circle, var(--paper) 0 2.5px, var(--c) 3px); }
 .pin.k-spot.want { background: var(--paper); }
+
+/* ---------- From ui-fun-pass (Herft): logomark, avatar editing, star pop, confetti ---------- */
+.wordmark-group { display: flex; align-items: center; gap: 8px; }
+.mark-group { display: flex; align-items: center; gap: 12px; }
+.logo-mark { flex-shrink: 0; display: block; color: var(--ink); }
+.avatar-edit { position: relative; display: inline-block; cursor: pointer; flex-shrink: 0; }
+.avatar-edit-badge {
+  position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 13px;
+  background: var(--ink); color: var(--paper); border: 2px solid var(--paper);
+  display: flex; align-items: center; justify-content: center;
+}
+.star-input button { transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .15s; }
+.star-input button.pop { animation: star-pop .32s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes star-pop { 0% { transform: scale(1); } 45% { transform: scale(1.18) rotate(-6deg); } 100% { transform: scale(1); } }
+.stat-table > div[data-go] { cursor: pointer; }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 60; }
+.confetti span { position: absolute; top: 45%; width: 7px; height: 7px; border-radius: 2px; animation: confetti-fly .8s ease-out forwards; }
+@keyframes confetti-fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
