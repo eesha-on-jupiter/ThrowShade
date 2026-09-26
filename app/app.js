@@ -131,6 +131,16 @@
       .sort((x, y) => y.a.avg - x.a.avg || y.a.n - x.a.n)
       .slice(0, limit || 10);
   }
+  // Trending: most-logged places community-wide in the last 7 days.
+  function trending(limit) {
+    const since = Date.now() - 7 * DAY;
+    const counts = {};
+    state.visits.forEach(v => { if (v.createdAt >= since) counts[v.buildingId] = (counts[v.buildingId] || 0) + 1; });
+    return Object.entries(counts).map(([bid, n]) => ({ b: BY_ID[bid], n }))
+      .filter(x => x.b)
+      .sort((x, y) => y.n - x.n || (avgFor(y.b.id).avg || 0) - (avgFor(x.b.id).avg || 0))
+      .slice(0, limit || 10);
+  }
   // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
   function recsFor(uid, limit) {
     const visited = new Set(visitsBy(uid).map(v => v.buildingId));
@@ -588,6 +598,21 @@
     </div>${nav('')}`;
   }
 
+  function viewTrending() {
+    const list = trending(50);
+    const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
+        <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
+      </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
   function buildingRow(b, right) {
     return `<button class="row" data-go="#/b/${b.id}">
       ${ph(b, { style: 'width:38px;height:38px', go: false })}
@@ -678,14 +703,22 @@
           </div>`;
         }).join('')}</div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
     } else if (tab === 'guides') {
+      const trend = trending(10);
+      const trendShelf = trend.length ? `
+        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
+          ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
+          <div class="rail-name ellipsis">${esc(x.b.name)}</div>
+          <div class="rail-meta muted">${x.n} log${x.n === 1 ? '' : 's'} this week</div>
+        </button>`).join('')}</div>` : '';
       const guides = buildGuides(state.me);
-      body = `<div class="pad">${guides.length ? guides.map(g => `
+      body = `<div class="pad">${trendShelf}${guides.length ? guides.map(g => `
         <div class="section-title" style="margin-top:8px"><span>${esc(g.title)} <span class="muted small">· ${esc(g.sub)}</span></span><button class="link" data-go="#/guide/${g.dim}/${encodeURIComponent(g.key)}">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${g.items.slice(0, 10).map(b => `<button class="rail-item" data-go="#/b/${b.id}">
           ${ph(b, { w: 300, cls: 'rail-photo', label: phLabel(b), go: false })}
           <div class="rail-name ellipsis">${esc(b.name)}</div>
           <div class="rail-meta muted">${esc(b.city || '')}</div>
-        </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
+        </button>`).join('')}</div>`).join('') : (trendShelf ? '' : `<div class="empty">Nothing to group yet.</div>`)}</div>`;
     } else {
       const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
       const beenCover = vs.length && BY_ID[vs[0].buildingId];
@@ -1807,6 +1840,7 @@
       case 'newlist': html = viewNewList(); break;
       case 'top': html = viewTopRated(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
+      case 'trending': html = viewTrending(); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
