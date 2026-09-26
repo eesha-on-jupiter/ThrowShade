@@ -665,13 +665,14 @@
   };
   const wmoLabel = c => c === 0 ? 'Clear' : c <= 2 ? 'Mostly clear' : c === 3 ? 'Cloudy' : c <= 48 ? 'Foggy' : c <= 67 || (c >= 80 && c <= 82) ? 'Rainy' : c <= 77 || c >= 85 ? 'Snowy' : c >= 95 ? 'Stormy' : 'Mixed';
   const weatherCache = {};
+  const visitDaySel = {}; // buildingId -> selected forecast day index (0 = today)
 
   function weatherKey(lat, lng) { return lat.toFixed(2) + ',' + lng.toFixed(2); }
 
-  function sunTimesFor(b) {
+  function sunTimesFor(b, forDate) {
     if (typeof SunCalc === 'undefined') return null;
     const now = new Date();
-    const times = SunCalc.getTimes(now, b.lat, b.lng);
+    const times = SunCalc.getTimes(forDate || now, b.lat, b.lng);
     return { now, sunrise: times.sunrise, sunset: times.sunset, goldenHour: times.goldenHour, goldenHourEnd: times.goldenHourEnd };
   }
 
@@ -692,34 +693,50 @@
   }
 
   function visitTimingHTML(b) {
-    const sun = sunTimesFor(b);
-    if (!sun) return '';
     const key = weatherKey(b.lat, b.lng);
     const w = weatherCache[key];
     if (!w) { loadWeather(b); }
-    const dayStart = sun.sunrise.getTime(), dayEnd = sun.sunset.getTime();
-    const pct = t => Math.max(0, Math.min(100, (t - dayStart) / (dayEnd - dayStart) * 100));
-    const nowPct = pct(sun.now.getTime());
-    const goldenPct = pct(sun.goldenHour.getTime());
+    const selIdx = visitDaySel[b.id] || 0;
+    const isToday = selIdx === 0;
     const fmtTime = t => t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-    const msToGolden = sun.goldenHour.getTime() - sun.now.getTime();
-    const inGolden = sun.now >= sun.goldenHour && sun.now <= sun.sunset;
+    // Pick the date this card is showing: today (live) or a future forecast day (noon local, so DST doesn't shift it).
+    const selDate = isToday ? new Date() : new Date(new Date().getTime() + selIdx * 86400000);
+    if (!isToday) selDate.setHours(12, 0, 0, 0);
+    const sun = sunTimesFor(b, selDate);
+    if (!sun) return '';
+
+    const dayStart = sun.sunrise.getTime(), dayEnd = sun.sunset.getTime();
+    const pct = t => Math.max(0, Math.min(100, (t - dayStart) / (dayEnd - dayStart) * 100));
+    const goldenPct = pct(sun.goldenHour.getTime());
+
     let noteHTML;
-    if (inGolden) {
-      noteHTML = `<b>Golden hour now</b> — the light won't be this good again till tomorrow.`;
-    } else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
-      const h = Math.floor(msToGolden / 3600000), m = Math.round((msToGolden % 3600000) / 60000);
-      noteHTML = `<b>Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m</b>` + (w && w.current ? ` — ${wmoLabel(w.current.weather_code).toLowerCase()} skies.` : '.');
-    } else if (sun.now > sun.sunset || sun.now < sun.sunrise) {
-      noteHTML = `Sun's down. Golden hour tomorrow around ${fmtTime(sun.goldenHour)}.`;
+    const dayWeather = w && w.daily && `${wmoLabel(w.daily.weather_code[selIdx]).toLowerCase()} skies`;
+    if (isToday) {
+      const msToGolden = sun.goldenHour.getTime() - sun.now.getTime();
+      const inGolden = sun.now >= sun.goldenHour && sun.now <= sun.sunset;
+      if (inGolden) {
+        noteHTML = `<b>Golden hour now</b> — the light won't be this good again till tomorrow.`;
+      } else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
+        const h = Math.floor(msToGolden / 3600000), m = Math.round((msToGolden % 3600000) / 60000);
+        noteHTML = `<b>Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m</b>` + (w && w.current ? ` — ${wmoLabel(w.current.weather_code).toLowerCase()} skies.` : '.');
+      } else if (sun.now > sun.sunset || sun.now < sun.sunrise) {
+        noteHTML = `Sun's down. Golden hour tomorrow around ${fmtTime(sun.goldenHour)}.`;
+      } else {
+        noteHTML = `Golden hour today at ${fmtTime(sun.goldenHour)}.`;
+      }
     } else {
-      noteHTML = `Golden hour today at ${fmtTime(sun.goldenHour)}.`;
+      const dayLabel = selDate.toLocaleDateString([], { weekday: 'long' });
+      noteHTML = `<b>Golden hour on ${dayLabel} at ${fmtTime(sun.goldenHour)}</b>` + (dayWeather ? ` — ${dayWeather} expected.` : '.');
     }
 
-    const statusHTML = w && w.current
-      ? `<span class="visit-icon">${WMO[w.current.weather_code] || '☀'}</span>${wmoLabel(w.current.weather_code)}, ${Math.round(w.current.temperature_2m)}°F`
-      : w && w.error ? `<span class="visit-icon">—</span>Weather unavailable` : `<span class="visit-icon">…</span>Loading…`;
+    const statusHTML = isToday
+      ? (w && w.current
+          ? `<span class="visit-icon">${WMO[w.current.weather_code] || '☀'}</span>${wmoLabel(w.current.weather_code)}, ${Math.round(w.current.temperature_2m)}°F`
+          : w && w.error ? `<span class="visit-icon">—</span>Weather unavailable` : `<span class="visit-icon">…</span>Loading…`)
+      : (w && w.daily
+          ? `<span class="visit-icon">${WMO[w.daily.weather_code[selIdx]] || '☀'}</span>${wmoLabel(w.daily.weather_code[selIdx])}, ${Math.round(w.daily.temperature_2m_max[selIdx])}°F high`
+          : `<span class="visit-icon">…</span>Loading…`);
 
     let forecastHTML = '';
     if (w && w.daily) {
@@ -728,13 +745,13 @@
       forecastHTML = `<div class="forecast-row">${dates.map((d, i) => {
         const day = i === 0 ? 'Today' : new Date(d + 'T12:00').toLocaleDateString([], { weekday: 'short' });
         const sset = new Date(sunsets[i]);
-        return `<div class="forecast-day${i === bestIdx ? ' best' : ''}">
+        return `<button class="forecast-day${i === bestIdx ? ' best' : ''}${i === selIdx ? ' sel' : ''}" data-act="visitday" data-id="${b.id}" data-i="${i}">
           <div class="d">${day}</div>
           <div class="icon">${WMO[codes[i]] || '☀'}</div>
           <div class="t">${Math.round(highs[i])}°</div>
           <div class="g">${fmtTime(sset)}</div>
           ${i === bestIdx ? '<div class="badge-best">BEST</div>' : ''}
-        </div>`;
+        </button>`;
       }).join('')}</div>`;
     }
 
@@ -743,8 +760,7 @@
         <div class="visit-status">${statusHTML}</div>
       </div>
       <div class="visit-bar">
-        <div class="visit-bar-fill" style="width:${nowPct}%"></div>
-        <div class="visit-bar-marker" style="left:${nowPct}%" data-label="NOW"></div>
+        ${isToday ? `<div class="visit-bar-fill" style="width:${pct(sun.now.getTime())}%"></div><div class="visit-bar-marker" style="left:${pct(sun.now.getTime())}%" data-label="NOW"></div>` : ''}
         <div class="visit-bar-marker golden" style="left:${goldenPct}%" data-label="GOLDEN"></div>
       </div>
       <div class="visit-times"><span>${fmtTime(sun.sunrise)}</span><span>${fmtTime(sun.sunset)}</span></div>
@@ -1172,6 +1188,7 @@
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
+    visitday(d) { visitDaySel[d.id] = +d.i; render(); },
     rmphoto() { draft.photo = null; render(); },
     delvisit(d) {
       if (!delArmed) { delArmed = true; render(); return; }
