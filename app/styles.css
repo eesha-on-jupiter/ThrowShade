@@ -180,31 +180,36 @@ button:active { transform: translateY(1px); }
 .row .sub { font-size: 12px; color: var(--muted); }
 .row.hl { border: 3px solid var(--ink); background: var(--soft); }
 
-/* ---------- Best time to visit ---------- */
-.visit-card { border: 1.5px solid var(--ink); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.visit-top { display: flex; align-items: center; justify-content: space-between; }
-.visit-status { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
-.visit-icon { width: 28px; height: 28px; border: 2px solid var(--ink); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-.visit-bar { position: relative; height: 28px; border: 1.5px solid var(--line); border-radius: 4px; background: var(--soft); overflow: hidden; }
-.visit-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: repeating-linear-gradient(45deg, var(--ink) 0, var(--ink) 1px, transparent 1px, transparent 6px); opacity: .12; }
-.visit-bar-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
-.visit-bar-marker.golden { background: #c2410c; }
-.visit-bar-marker::after { content: attr(data-label); position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; white-space: nowrap; color: inherit; }
-.visit-times { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
-.visit-note { font-size: 12.5px; color: var(--ink); display: flex; align-items: flex-start; gap: 6px; }
-.visit-note .dot-live { width: 6px; height: 6px; border-radius: 50%; background: #7a8b2e; flex-shrink: 0; margin-top: 5px; animation: pulse 2s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-.forecast-row { display: flex; gap: 8px; overflow-x: auto; }
-.forecast-day { flex: 1; min-width: 58px; border: 1.5px solid var(--line); border-radius: 6px; padding: 8px 6px; text-align: center; display: flex; flex-direction: column; gap: 4px; background: var(--paper); }
-.forecast-day.best { border-color: var(--ink); border-width: 2px; background: var(--soft); }
-.forecast-day.sel { background: var(--ink); }
-.forecast-day.sel .d, .forecast-day.sel .t, .forecast-day.sel .g { color: var(--paper); }
-.forecast-day .d { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
-.forecast-day.best .d { color: var(--ink); }
-.forecast-day .icon { font-size: 16px; }
-.forecast-day .t { font-size: 11px; font-weight: 600; }
-.forecast-day .g { font-size: 9px; color: var(--muted); }
-.badge-best { font-size: 8px; font-weight: 700; letter-spacing: .03em; background: var(--ink); color: var(--paper); border-radius: 3px; padding: 1px 4px; margin: 0 auto; }
+/* ---------- Best time to visit (inside About, minimal by default) ---------- */
+.visit-widget { border-top: 1.5px solid var(--line); margin-top: 4px; padding-top: 10px; }
+.visit-summary { width: 100%; display: flex; align-items: center; gap: 8px; background: none; text-align: left; }
+.visit-status { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+.visit-icon { font-size: 14px; flex-shrink: 0; }
+.visit-quick { flex-grow: 1; font-size: 12px; text-align: right; }
+.visit-chevron { font-size: 12px; color: var(--muted); flex-shrink: 0; width: 14px; text-align: center; }
+.visit-widget.open .visit-summary { margin-bottom: 12px; }
+
+.visit-daytabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+.daytab { flex-shrink: 0; height: 32px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 16px; font-size: 12px; }
+.daytab.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+
+.visit-scrub { position: relative; }
+.visit-scrub-track { position: relative; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.visit-scrub-zone { position: absolute; top: 0; bottom: 0; background: #c2410c; opacity: .35; }
+.visit-scrub-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.visit-slider {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin-top: -17px;
+  background: transparent; position: relative;
+}
+.visit-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); cursor: pointer;
+}
+.visit-slider::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); cursor: pointer;
+}
+.visit-slider::-moz-range-track { background: transparent; }
+.visit-scrub-readout { font-size: 12.5px; margin-top: 4px; }
 
 .statbox { flex: 1; border: 1.5px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; }
 .statbox .val { font-size: 26px; font-weight: 700; line-height: 1.2; }
