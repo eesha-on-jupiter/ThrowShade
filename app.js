@@ -687,12 +687,19 @@
           <div class="rail-meta muted">${esc(b.city || '')}</div>
         </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
     } else {
+      const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+      const beenCover = vs.length && BY_ID[vs[0].buildingId];
       const wantItems = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
       const want = wantItems.length;
       const wantCover = want && BY_ID[wantItems[0].buildingId];
       const lists = myLists();
       body = `<div class="stack-6 pad">
-        ${!want && !lists.length ? `<div class="empty">Lists are how you collect places — start with Want to Visit, or make your own to share with friends, like "Chicago rooftop bars."</div>` : ''}
+        ${!vs.length && !want && !lists.length ? `<div class="empty">Lists are how you collect places — start with Want to Visit, or make your own to share with friends, like "Chicago rooftop bars."</div>` : ''}
+        <button class="row" data-go="#/list/been">
+          ${beenCover ? ph(beenCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('check')}</div>`}
+          <div class="grow"><b>Been</b><div class="sub">${vs.length} place${vs.length === 1 ? '' : 's'} logged · only you</div></div>
+          ${icon('chevron', 'sm')}
+        </button>
         <button class="row" data-go="#/list/want">
           ${wantCover ? ph(wantCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`}
           <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
@@ -730,6 +737,24 @@
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Want to Visit</div></div>
       <div class="stack-6 pad">${rows || '<div class="empty">Nothing saved yet.<br>Tap Save on any place.</div>'}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
+  function viewBeenList() {
+    const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const rows = vs.map((v, i) => {
+      const b = BY_ID[v.buildingId];
+      return `<button class="row" data-go="#/b/${b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(b, { w: 120, style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)} · ${fmtDate(v.visitedOn)}</div></div>
+        ${starsHTML(v.stars)}
+      </button>`;
+    }).join('');
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Been</div></div>
+      <div class="stack-6 pad">${rows || '<div class="empty">You haven’t logged anything yet.<br>Tap the + to throw shade at your first place.</div>'}</div>
       <div class="spacer"></div>
     </div>${nav('lists')}`;
   }
@@ -1777,7 +1802,7 @@
       case 'map': html = viewHome('map'); after = initMap; break;
       case 'find': html = viewFind(qs); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
-      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
+      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[1] === 'been' ? viewBeenList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
       case 'save': html = viewSaveTo(seg[1]); break;
       case 'newlist': html = viewNewList(); break;
       case 'top': html = viewTopRated(); break;
