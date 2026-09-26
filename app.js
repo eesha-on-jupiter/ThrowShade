@@ -23,6 +23,18 @@
   const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
   const kindOf = b => b.kind || 'building';
   const MAX_PHOTOS = 4;
+  // Stand-in photos for seeded critics' posts (app/seed-photos.js), credited under the photos.
+  const SEED_PHOTOS = window.TS_SEED_PHOTOS || {};
+  const PHOTO_CREDITS = {};
+  Object.values(SEED_PHOTOS).forEach(list => list.forEach(x => { PHOTO_CREDITS[x.url] = x.credit; }));
+  const SEED_PHOTO_COUNTS = [2, 1, 3, 1, 0, 2, 1, 4, 1, 2];
+  function seedPhotosFor(userId, bid, i) {
+    const pool = SEED_PHOTOS[bid] || [];
+    if (!pool.length) return [];
+    const shift = Math.max(0, window.TS_SEED_USERS.findIndex(u => u.id === userId));
+    const n = Math.min(SEED_PHOTO_COUNTS[i % SEED_PHOTO_COUNTS.length], pool.length);
+    return Array.from({ length: n }, (_, k) => pool[(shift + k) % pool.length].url);
+  }
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
@@ -41,6 +53,14 @@
     delete v.photo;
     if (!v.likes) v.likes = [];
   });
+  // (Re)apply stand-in photos to seeded posts; photos people uploaded (data: URLs) are never touched.
+  if (state.seedPhotos !== 2) {
+    state.visits.forEach(v => {
+      const m = /^v(\d+)$/.exec(v.id);
+      if (m && v.photos.every(p => !p.startsWith('data:'))) v.photos = seedPhotosFor(v.userId, v.buildingId, +m[1]);
+    });
+    state.seedPhotos = 2;
+  }
 
   function seed() {
     const now = Date.now();
@@ -54,7 +74,7 @@
       return !b || stars < 3 ? [] : (STYLE_LIKES[b.style] || ['Design']).slice(0, 2 + (i % 2));
     };
     const visits = window.TS_SEED_VISITS.map(([userId, buildingId, stars, note, h], i) => ({
-      id: 'v' + i, userId, buildingId, stars, note, photos: [], likes: seedLikes(userId, buildingId, stars, i),
+      id: 'v' + i, userId, buildingId, stars, note, photos: seedPhotosFor(userId, buildingId, i), likes: seedLikes(userId, buildingId, stars, i),
       visitedOn: isoDate(now - h * HOUR - (i % 4) * DAY),
       createdAt: now - h * HOUR,
     }));
@@ -271,7 +291,11 @@
   function shotsHTML(photos) {
     if (!photos || !photos.length) return '';
     const list = photos.slice(0, MAX_PHOTOS);
-    return `<div class="shots n${list.length}">${list.map(p => `<div class="shot" style="background-image:url('${p}')"></div>`).join('')}</div>`;
+    const credits = list.map(p => PHOTO_CREDITS[p]).filter(Boolean);
+    const creditLine = credits.length
+      ? `<div class="shot-credit">Photo${credits.length > 1 ? 's' : ''}: ${esc([...new Set(credits.map(c => c.artist))].join(', '))} · <a href="${esc(credits[0].page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
+      : '';
+    return `<div class="shots n${list.length}">${list.map(p => `<div class="shot" style="background-image:url('${p}')"></div>`).join('')}</div>${creditLine}`;
   }
   const phLabel = b => [b.style, b.year].filter(Boolean).join(' · ').toUpperCase();
   const byLine = b => [b.architect, b.year].filter(Boolean).join(' · ');
@@ -702,8 +726,12 @@
       }).join('') : `<div class="empty">No critiques yet. Be the first to throw shade.</div>`;
     }
     // Credit the Commons photographer whenever the hero is the Commons image (not a user's photo).
-    const heroIsCommons = !photoFor(b.id) && b.image;
-    const credit = heroIsCommons && b.credit
+    const heroPhoto = photoFor(b.id);
+    const heroSeedCredit = heroPhoto && PHOTO_CREDITS[heroPhoto];
+    const heroIsCommons = !heroPhoto && b.image;
+    const credit = heroSeedCredit
+      ? `<div class="credit">Photo: ${esc(heroSeedCredit.artist)}${heroSeedCredit.license ? ' · ' + esc(heroSeedCredit.license) : ''} · <a href="${esc(heroSeedCredit.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
+      : heroIsCommons && b.credit
       ? `<div class="credit">Photo: ${esc(b.credit.artist)}${b.credit.license ? ' · ' + esc(b.credit.license) : ''} · <a href="${esc(b.credit.page)}" target="_blank" rel="noopener">Wikimedia Commons</a></div>`
       : heroIsCommons ? `<div class="credit"><a href="${esc(commonsURL(b.image, 1200))}" target="_blank" rel="noopener">Photo: Wikimedia Commons</a></div>` : '';
     const q = encodeURIComponent(b.name + (b.city ? ' ' + b.city : ''));
