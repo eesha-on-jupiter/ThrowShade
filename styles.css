@@ -388,6 +388,13 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .wordmark-group { display: flex; align-items: center; gap: 8px; }
 .mark-group { display: flex; align-items: center; gap: 12px; }
 .logo-mark { flex-shrink: 0; display: block; color: var(--ink); }
+.avatar-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+.avatar-pick {
+  aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer;
+  background-color: #fff; background-size: cover; background-position: center;
+  box-shadow: inset 0 0 0 1px var(--fill);
+}
+.avatar-pick.on { border-color: var(--ink); }
 .avatar-edit { position: relative; display: inline-block; cursor: pointer; flex-shrink: 0; }
 .avatar-edit-badge {
   position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 13px;
