@@ -285,7 +285,7 @@
 
   // ---------- UI state ----------
   const root = document.getElementById('app');
-  let mapKind = 'all', mapFilter = 'all', mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
+  let mapKind = 'all', mapFilter = 'all', mapKindOpen = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
   let findTab = 'buildings', findQ = '';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -341,19 +341,25 @@
     const head = `
       <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}<button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>`;
     if (tab === 'map') {
+      const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
-        <div class="pills">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}<span class="pill-sep"></span>${pill('been', 'Been')}${pill('want', 'Want to Visit')}${pill('friends', 'Friends’ picks')}</div>
+        <div class="map-legend" id="legend">
+          <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles${icon('chevron', 'sm')}</button>
+          <div class="legend-items stack-6 closed" id="legend-items" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
+            <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
+            <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
+        </div>
+        <div class="pills">
+          <button class="pill ${mapKindOpen ? 'on' : ''}" data-act="mapkindtoggle">${KIND_LABEL[mapKind]}${icon('chevron', 'sm')}</button>
+          <span class="pill-sep"></span>
+          ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
+        </div>
+        ${mapKindOpen ? `<div class="pills">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>` : ''}
         <div class="map-wrap" style="position:relative;flex:1">
           <div id="map"></div>
-          <div class="map-legend closed" id="legend">
-            <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles</button>
-            <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
-              <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
-              <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
-          </div>
           <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
           <button class="btn-sq map-pinbtn" id="pinbtn" data-act="droppin" aria-label="Drop a pin to add a building">${icon('pin')}</button>
           <div class="map-hint" id="map-hint" hidden>Tap a place to add it · or long-press</div>
@@ -722,8 +728,8 @@
     const btn = document.getElementById('pinbtn'), hint = document.getElementById('map-hint');
     if (btn) btn.classList.toggle('on', on);
     if (hint) hint.hidden = !on;
-    const legend = document.getElementById('legend');
-    if (legend && on) legend.classList.add('closed');
+    const legendItems = document.getElementById('legend-items');
+    if (legendItems && on) legendItems.classList.add('closed');
   }
   function placePin(latlng) {
     setPinMode(false);
@@ -1367,8 +1373,9 @@
     btab(d) { bTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
-    mapkind(d) { mapKind = d.k; mapSel = null; render(); },
-    legend() { document.getElementById('legend').classList.toggle('closed'); },
+    mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
+    legend() { document.getElementById('legend-items').classList.toggle('closed'); },
+    mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
     locate() {
       requestLocation(ok => {
         if (!ok) toast('Location unavailable — using ' + loc.label);
