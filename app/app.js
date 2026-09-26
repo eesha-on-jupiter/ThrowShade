@@ -601,12 +601,13 @@
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
       <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="grow"></div>`}
-        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}</div>
+      </div>
       <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
         ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
           <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
           : avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
+        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}
       </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
