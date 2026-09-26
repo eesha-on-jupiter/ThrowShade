@@ -696,9 +696,10 @@
     try {
       const d = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + qs({
         latitude: b.lat, longitude: b.lng, current: 'temperature_2m,weather_code',
+        hourly: 'temperature_2m,weather_code',
         daily: 'weather_code,temperature_2m_max,sunset', temperature_unit: 'fahrenheit', timezone: 'auto', forecast_days: 5,
       }), null, 8000);
-      weatherCache[key] = { loading: false, current: d.current, daily: d.daily };
+      weatherCache[key] = { loading: false, current: d.current, daily: d.daily, hourly: d.hourly };
     } catch (e) {
       weatherCache[key] = { loading: false, error: true };
     }
@@ -719,13 +720,15 @@
     const sun = sunTimesFor(b, selDate);
     if (!sun) return '';
 
-    const statusHTML = isToday
-      ? (w && w.current
-          ? `<span class="visit-icon">${WMO[w.current.weather_code] || '☀'}</span>${wmoLabel(w.current.weather_code)}, ${Math.round(w.current.temperature_2m)}°F`
-          : w && w.error ? `<span class="visit-icon">—</span>Weather unavailable` : `<span class="visit-icon">…</span>Loading…`)
-      : (w && w.daily
-          ? `<span class="visit-icon">${WMO[w.daily.weather_code[selIdx]] || '☀'}</span>${wmoLabel(w.daily.weather_code[selIdx])}, ${Math.round(w.daily.temperature_2m_max[selIdx])}°F high`
-          : `<span class="visit-icon">…</span>Loading…`);
+    const nowIcon = isToday
+      ? (w && w.current ? WMO[w.current.weather_code] || '☀' : w && w.error ? '—' : '…')
+      : (w && w.daily ? WMO[w.daily.weather_code[selIdx]] || '☀' : '…');
+    const nowTemp = isToday
+      ? (w && w.current ? Math.round(w.current.temperature_2m) + '°F' : w && w.error ? 'N/A' : '…')
+      : (w && w.daily ? Math.round(w.daily.temperature_2m_max[selIdx]) + '°F high' : '…');
+    const nowCond = isToday
+      ? (w && w.current ? wmoLabel(w.current.weather_code) : w && w.error ? 'Weather unavailable' : 'Loading')
+      : (w && w.daily ? wmoLabel(w.daily.weather_code[selIdx]) : 'Loading');
 
     let quickNote;
     if (isToday) {
@@ -754,33 +757,54 @@
         }).join('')}</div>`;
       }
 
-      // Scrub domain: 45 min either side of sunrise/sunset, so dawn/dusk are reachable too.
-      const pad = 45 * 60000;
-      const lo = sun.sunrise.getTime() - pad, hi = sun.sunset.getTime() + pad;
-      visitSunCache[b.id] = { sun, lo, hi };
-      const defaultPos = isToday ? Math.round(Math.max(0, Math.min(1000, (sun.now.getTime() - lo) / (hi - lo) * 1000))) : 500;
-      const pos = visitSliderPos[b.id] != null ? visitSliderPos[b.id] : defaultPos;
-      visitSliderPos[b.id] = pos;
-      const scrubTime = new Date(lo + (pos / 1000) * (hi - lo));
-      const zonePct = t => Math.max(0, Math.min(100, (t.getTime() - lo) / (hi - lo) * 100));
-      const nowPct = isToday ? zonePct(sun.now) : null;
+      let scrubHTML;
+      const dateStr = w && w.daily && w.daily.time[selIdx];
+      const hoursForDay = (w && w.hourly && dateStr)
+        ? w.hourly.time.reduce((acc, t, i) => { if (t.startsWith(dateStr)) acc.push({ t: new Date(t), temp: w.hourly.temperature_2m[i], code: w.hourly.weather_code[i] }); return acc; }, [])
+        : [];
 
-      expandedHTML = `
-        ${dayTabsHTML}
-        <div class="visit-scrub">
-          <div class="visit-scrub-track">
-            <div class="visit-scrub-zone" style="left:${zonePct(sun.sunrise)}%;width:${Math.max(0, zonePct(sun.goldenHourEnd) - zonePct(sun.sunrise))}%"></div>
-            <div class="visit-scrub-zone" style="left:${zonePct(sun.goldenHour)}%;width:${Math.max(0, zonePct(sun.sunset) - zonePct(sun.goldenHour))}%"></div>
-            ${nowPct != null ? `<div class="visit-scrub-now" style="left:${nowPct}%"></div>` : ''}
+      if (hoursForDay.length) {
+        const lo = hoursForDay[0].t.getTime(), hi = hoursForDay[hoursForDay.length - 1].t.getTime();
+        visitSunCache[b.id] = { sun, hours: hoursForDay };
+        const defaultIdx = isToday
+          ? hoursForDay.reduce((best, h, i) => Math.abs(h.t - sun.now) < Math.abs(hoursForDay[best].t - sun.now) ? i : best, 0)
+          : Math.min(12, hoursForDay.length - 1);
+        const idx = visitSliderPos[b.id] != null ? Math.min(visitSliderPos[b.id], hoursForDay.length - 1) : defaultIdx;
+        visitSliderPos[b.id] = idx;
+        const cur = hoursForDay[idx];
+        const zonePct = t => Math.max(0, Math.min(100, (t.getTime() - lo) / (hi - lo) * 100));
+        const nowPct = isToday ? zonePct(sun.now) : null;
+
+        scrubHTML = `
+          <div class="visit-scrub">
+            <div class="visit-scrub-track">
+              <div class="visit-scrub-zone" style="left:${zonePct(sun.sunrise)}%;width:${Math.max(0, zonePct(sun.goldenHourEnd) - zonePct(sun.sunrise))}%"></div>
+              <div class="visit-scrub-zone" style="left:${zonePct(sun.goldenHour)}%;width:${Math.max(0, zonePct(sun.sunset) - zonePct(sun.goldenHour))}%"></div>
+              ${nowPct != null ? `<div class="visit-scrub-now" style="left:${nowPct}%"></div>` : ''}
+            </div>
+            <input type="range" class="visit-slider" min="0" max="${hoursForDay.length - 1}" step="1" value="${idx}" data-input="visitslider" data-id="${b.id}" aria-label="Time of day">
           </div>
-          <input type="range" class="visit-slider" min="0" max="1000" value="${pos}" data-input="visitslider" data-id="${b.id}" aria-label="Time of day">
-        </div>
-        <div class="visit-scrub-readout"><b id="visit-scrub-time-${b.id}">${fmtTime(scrubTime)}</b><span id="visit-scrub-label-${b.id}" class="muted"> — ${lightLabel(scrubTime, sun)}</span></div>`;
+          <div class="visit-scrub-readout">
+            <span class="visit-icon-lg" id="visit-scrub-icon-${b.id}">${WMO[cur.code] || '☀'}</span>
+            <div class="grow">
+              <div><b id="visit-scrub-temp-${b.id}">${Math.round(cur.temp)}°F</b> <span id="visit-scrub-time-${b.id}" class="muted">${fmtTime(cur.t)}</span></div>
+              <div id="visit-scrub-label-${b.id}" class="small muted">${lightLabel(cur.t, sun)}</div>
+            </div>
+          </div>`;
+      } else {
+        scrubHTML = `<div class="small muted">Loading hourly forecast…</div>`;
+      }
+
+      expandedHTML = `${dayTabsHTML}${scrubHTML}`;
     }
 
     return `<div class="visit-widget${expanded ? ' open' : ''}">
       <button class="visit-summary" data-act="visitexpand" data-id="${b.id}">
-        <span class="visit-status">${statusHTML}</span>
+        <span class="visit-icon-lg">${nowIcon}</span>
+        <span class="visit-main">
+          <b class="visit-temp">${nowTemp}</b>
+          <span class="visit-cond muted">${nowCond}</span>
+        </span>
         <span class="visit-quick muted">${quickNote}</span>
         <span class="visit-chevron">${expanded ? '︿' : '﹀'}</span>
       </button>
@@ -1256,13 +1280,18 @@
     visitslider(el) {
       const id = el.dataset.id, c = visitSunCache[id];
       if (!c) return;
-      const pos = +el.value;
-      visitSliderPos[id] = pos;
-      const t = new Date(c.lo + (pos / 1000) * (c.hi - c.lo));
+      const idx = +el.value;
+      visitSliderPos[id] = idx;
+      const h = c.hours[idx];
+      if (!h) return;
+      const iconEl = document.getElementById('visit-scrub-icon-' + id);
+      const tempEl = document.getElementById('visit-scrub-temp-' + id);
       const timeEl = document.getElementById('visit-scrub-time-' + id);
       const labelEl = document.getElementById('visit-scrub-label-' + id);
-      if (timeEl) timeEl.textContent = t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      if (labelEl) labelEl.textContent = ' — ' + lightLabel(t, c.sun);
+      if (iconEl) iconEl.textContent = WMO[h.code] || '☀';
+      if (tempEl) tempEl.textContent = Math.round(h.temp) + '°F';
+      if (timeEl) timeEl.textContent = h.t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      if (labelEl) labelEl.textContent = lightLabel(h.t, c.sun);
     },
   };
 

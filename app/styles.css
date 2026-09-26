@@ -180,20 +180,22 @@ button:active { transform: translateY(1px); }
 .row .sub { font-size: 12px; color: var(--muted); }
 .row.hl { border: 3px solid var(--ink); background: var(--soft); }
 
-/* ---------- Best time to visit (inside About, minimal by default) ---------- */
-.visit-widget { border-top: 1.5px solid var(--line); margin-top: 4px; padding-top: 10px; }
-.visit-summary { width: 100%; display: flex; align-items: center; gap: 8px; background: none; text-align: left; }
-.visit-status { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; flex-shrink: 0; }
-.visit-icon { font-size: 14px; flex-shrink: 0; }
+/* ---------- Best time to visit (inside About, collapsed by default) ---------- */
+.visit-widget { border: 1.5px solid var(--line); border-radius: 6px; margin-top: 12px; padding: 12px; }
+.visit-summary { width: 100%; display: flex; align-items: center; gap: 10px; background: none; text-align: left; }
+.visit-icon-lg { width: 34px; height: 34px; border: 2px solid var(--ink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; background: var(--paper); }
+.visit-main { display: flex; flex-direction: column; line-height: 1.25; flex-shrink: 0; }
+.visit-temp { font-size: 16px; font-weight: 700; }
+.visit-cond { font-size: 11px; }
 .visit-quick { flex-grow: 1; font-size: 12px; text-align: right; }
 .visit-chevron { font-size: 12px; color: var(--muted); flex-shrink: 0; width: 14px; text-align: center; }
-.visit-widget.open .visit-summary { margin-bottom: 12px; }
+.visit-widget.open .visit-summary { margin-bottom: 14px; }
 
-.visit-daytabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+.visit-daytabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
 .daytab { flex-shrink: 0; height: 32px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 16px; font-size: 12px; }
 .daytab.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 
-.visit-scrub { position: relative; }
+.visit-scrub { position: relative; margin-bottom: 12px; }
 .visit-scrub-track { position: relative; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
 .visit-scrub-zone { position: absolute; top: 0; bottom: 0; background: #c2410c; opacity: .35; }
 .visit-scrub-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
@@ -209,7 +211,8 @@ button:active { transform: translateY(1px); }
   width: 18px; height: 18px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); cursor: pointer;
 }
 .visit-slider::-moz-range-track { background: transparent; }
-.visit-scrub-readout { font-size: 12.5px; margin-top: 4px; }
+.visit-scrub-readout { display: flex; align-items: center; gap: 10px; }
+.visit-scrub-readout .visit-icon-lg { font-size: 18px; }
 
 .statbox { flex: 1; border: 1.5px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; }
 .statbox .val { font-size: 26px; font-weight: 700; line-height: 1.2; }
