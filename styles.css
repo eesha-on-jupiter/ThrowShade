@@ -399,7 +399,8 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .signin-avatar .avatar-edit { background: none; border: 0; padding: 0; }
 .avatar-menu { align-self: stretch; padding: 12px; border-radius: 16px; background: var(--fill); }
 .avatar-upload { display: flex; align-items: center; justify-content: center; color: var(--text-2); }
-#su-avatar { background-size: cover; background-position: center; }
+#su-avatar { width: 144px; height: 144px; background-size: cover; background-position: center; }
+.signin-avatar .avatar-edit-badge { right: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 17px; }
 .avatar-edit { position: relative; display: inline-block; cursor: pointer; flex-shrink: 0; }
 .avatar-edit-badge {
   position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 13px;
