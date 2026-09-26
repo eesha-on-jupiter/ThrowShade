@@ -142,6 +142,43 @@ window.TS_SEED_VISITS.push(
   ['u-jonah', 'wd-Q2143136', 3, "Bits of other buildings glued on. Charming, but it's a scrapbook.", 70],
 );
 
+// Chicago bridges, art and spots (ids from app/wikidata.js).
+window.TS_SEED_VISITS.push(
+  ['u-mara', 'wd-Q589099', 4, "Everyone's selfie spot, but the omphalos underneath is the real show.", 3],
+  ['u-theo', 'wd-Q2002163', 4, "Gehry's steel snake. Scales over concrete, and it hides the traffic noise.", 12],
+  ['u-jonah', 'wd-Q3005469', 5, 'Giant faces spitting water on kids. Pure joy.', 16],
+  ['u-priya', 'wd-Q1928112', 5, 'Double-leaf, double-deck bascule. Watch it lift once in your life.', 22],
+  ['u-theo', 'wd-Q3180096', 4, 'The steel trellis carrying the sound system is the real architecture.', 34],
+  ['u-mara', 'wd-Q5095736', 4, "Nobody agrees what it is. That's the point.", 60],
+);
+
+// Aspects each seeded critic liked, keyed "userId|buildingId". Unlisted logs get defaults from the building's style.
+window.TS_SEED_LIKES = {
+  'u-mara|salk': ['Material', 'Context', 'Light'],
+  'u-mara|kimbell': ['Light', 'Structure', 'Space'],
+  'u-mara|wd-Q753180': ['Structure', 'Space', 'Design'],
+  'u-mara|wd-Q929965': ['Design', 'Landscape', 'Detail'],
+  'u-mara|wd-Q589099': ['Material', 'Concept', 'Scale'],
+  'u-mara|wd-Q5095736': ['Concept', 'Scale'],
+  'u-mara|vessel': [],
+  'u-theo|barbican': ['Landscape', 'Material', 'Atmosphere'],
+  'u-theo|wd-Q653584': ['Structure', 'Material', 'Design'],
+  'u-theo|wd-Q3161356': ['Interior', 'Light', 'Atmosphere'],
+  'u-theo|wd-Q2002163': ['Structure', 'Material', 'Views'],
+  'u-theo|wd-Q3180096': ['Structure', 'Design', 'Atmosphere'],
+  'u-priya|pompidou': ['Structure', 'Engineering', 'Facade'],
+  'u-priya|lloyds': ['Engineering', 'Detail', 'Facade'],
+  'u-priya|wd-Q217727': ['Structure', 'Engineering', 'Facade'],
+  'u-priya|wd-Q29294': ['Engineering', 'Scale', 'Views'],
+  'u-priya|wd-Q622895': ['Facade', 'Structure', 'Concept'],
+  'u-priya|wd-Q1928112': ['Engineering', 'Structure', 'Detail'],
+  'u-jonah|wd-Q1925179': ['Facade', 'Detail', 'Craft'],
+  'u-jonah|wd-Q3441853': ['Interior', 'Light', 'Detail'],
+  'u-jonah|wd-Q2143136': ['Facade', 'Craft'],
+  'u-jonah|wd-Q3005469': ['Concept', 'Atmosphere', 'Context'],
+  'u-jonah|att-building': ['Facade', 'Concept', 'Detail'],
+};
+
 // [userId, buildingId]
 window.TS_SEED_WANT = [
   ['u-mara', 'barbican'], ['u-mara', 'church-of-light'],
