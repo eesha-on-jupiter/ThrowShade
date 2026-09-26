@@ -794,6 +794,7 @@
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
+        ${visitTimingHTML(b)}
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -831,7 +832,6 @@
           ${b.address ? `<div class="small muted">${esc(b.address)}</div>` : ''}
           <div class="small muted">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}${adder ? ` · pinned by @${esc(adder.handle)}` : ''}</div>
           <div class="chips">${links}</div>
-          ${visitTimingHTML(b)}
         </div>
         <div class="tabs">
           <button class="${bTab === 'critiques' ? 'on' : ''}" data-act="btab" data-k="critiques">Critiques · ${vs.length}</button>
@@ -1163,9 +1163,6 @@
   const wmoLabel = c => c === 0 ? 'Clear' : c <= 2 ? 'Mostly clear' : c === 3 ? 'Cloudy' : c <= 48 ? 'Foggy' : c <= 67 || (c >= 80 && c <= 82) ? 'Rainy' : c <= 77 || c >= 85 ? 'Snowy' : c >= 95 ? 'Stormy' : 'Mixed';
   const weatherCache = {};
   const visitDaySel = {}; // buildingId -> selected forecast day index (0 = today)
-  const visitExpanded = {}; // buildingId -> is the widget open
-  const visitSliderPos = {}; // buildingId -> scrub position, 0..1000
-  const visitSunCache = {}; // buildingId -> { sun, lo, hi } for the currently rendered day, read by the slider handler
 
   function weatherKey(lat, lng) { return lat.toFixed(2) + ',' + lng.toFixed(2); }
 
@@ -1174,16 +1171,6 @@
     const now = new Date();
     const times = SunCalc.getTimes(forDate || now, b.lat, b.lng);
     return { now, sunrise: times.sunrise, sunset: times.sunset, goldenHour: times.goldenHour, goldenHourEnd: times.goldenHourEnd };
-  }
-
-  // What the light looks like at an arbitrary scrubbed time within the sunrise→sunset window.
-  function lightLabel(t, sun) {
-    const ms = t.getTime();
-    if (ms < sun.sunrise.getTime()) return 'Before sunrise — flat, cool light';
-    if (ms < sun.goldenHourEnd.getTime()) return 'Morning golden hour — warm, soft light';
-    if (ms < sun.goldenHour.getTime()) return 'Midday — harsh overhead light';
-    if (ms <= sun.sunset.getTime()) return 'Golden hour — warm, soft light';
-    return 'After sunset — flat, cool light';
   }
 
   async function loadWeather(b) {
@@ -1215,84 +1202,71 @@
     if (!isToday) selDate.setHours(12, 0, 0, 0);
     const sun = sunTimesFor(b, selDate);
     if (!sun) return '';
-    // SunCalc returns true instants; Open-Meteo's hourly times are the place's wall clock. Put the sun times on the
-    // place's wall clock too, so markers line up and times read right wherever the viewer is (e.g. Chicago from NY).
+    // SunCalc returns true instants; Open-Meteo's daily times are the place's wall clock. Put the sun times on the
+    // place's wall clock too, so times read right wherever the viewer is (e.g. Chicago from NY).
     const toPlace = t => (w && w.tz ? new Date(t.toLocaleString('en-US', { timeZone: w.tz })) : t);
     Object.keys(sun).forEach(k => { sun[k] = toPlace(sun[k]); });
 
-    const nowIcon = isToday
-      ? (w && w.current ? WMO[w.current.weather_code] || '☀' : w && w.error ? '—' : '…')
-      : (w && w.daily ? WMO[w.daily.weather_code[selIdx]] || '☀' : '…');
-    const nowTemp = isToday
-      ? (w && w.current ? Math.round(w.current.temperature_2m) + '°F' : w && w.error ? 'N/A' : '…')
-      : (w && w.daily ? Math.round(w.daily.temperature_2m_max[selIdx]) + '°F high' : '…');
-    const nowCond = isToday
-      ? (w && w.current ? wmoLabel(w.current.weather_code) : w && w.error ? 'Weather unavailable' : 'Loading')
-      : (w && w.daily ? wmoLabel(w.daily.weather_code[selIdx]) : 'Loading');
+    const dayStart = sun.sunrise.getTime(), dayEnd = sun.sunset.getTime();
+    const pct = t => Math.max(0, Math.min(100, (t - dayStart) / (dayEnd - dayStart) * 100));
+    const goldenPct = pct(sun.goldenHour.getTime());
 
-    let quickNote;
+    let noteHTML;
+    const dayWeather = w && w.daily && `${wmoLabel(w.daily.weather_code[selIdx]).toLowerCase()} skies`;
     if (isToday) {
       const msToGolden = sun.goldenHour.getTime() - sun.now.getTime();
       const inGolden = sun.now >= sun.goldenHour && sun.now <= sun.sunset;
-      if (inGolden) quickNote = 'Golden hour now';
-      else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
+      if (inGolden) {
+        noteHTML = `<b>Golden hour now</b> — the light won't be this good again till tomorrow.`;
+      } else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
         const h = Math.floor(msToGolden / 3600000), m = Math.round((msToGolden % 3600000) / 60000);
-        quickNote = `Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m`;
-      } else if (sun.now > sun.sunset || sun.now < sun.sunrise) quickNote = `Golden hour tomorrow ~${fmtTime(sun.goldenHour)}`;
-      else quickNote = `Golden hour at ${fmtTime(sun.goldenHour)}`;
-    } else {
-      quickNote = `Golden hour ${selDate.toLocaleDateString([], { weekday: 'short' })} at ${fmtTime(sun.goldenHour)}`;
-    }
-
-    const expanded = !!visitExpanded[b.id];
-    let expandedHTML = '';
-    if (expanded) {
-      let dayTabsHTML = '';
-      if (w && w.daily) {
-        const codes = w.daily.weather_code, dates = w.daily.time;
-        const bestIdx = codes.reduce((best, c, i) => (i > 0 && c <= 2 && (best < 0 || c < codes[best])) ? i : best, -1);
-        dayTabsHTML = `<div class="visit-daytabs">${dates.map((d, i) => {
-          const day = i === 0 ? 'Today' : new Date(d + 'T12:00').toLocaleDateString([], { weekday: 'short' });
-          return `<button class="daytab${i === selIdx ? ' on' : ''}" data-act="visitday" data-id="${b.id}" data-i="${i}">${day}${i === bestIdx ? ' ★' : ''}</button>`;
-        }).join('')}</div>`;
+        noteHTML = `<b>Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m</b>` + (w && w.current ? ` — ${wmoLabel(w.current.weather_code).toLowerCase()} skies.` : '.');
+      } else if (sun.now > sun.sunset || sun.now < sun.sunrise) {
+        noteHTML = `Sun's down. Golden hour tomorrow around ${fmtTime(sun.goldenHour)}.`;
+      } else {
+        noteHTML = `Golden hour today at ${fmtTime(sun.goldenHour)}.`;
       }
-
-      // Scrub domain: 45 min either side of sunrise/sunset, so dawn/dusk are reachable too.
-      const pad = 45 * 60000;
-      const lo = sun.sunrise.getTime() - pad, hi = sun.sunset.getTime() + pad;
-      visitSunCache[b.id] = { sun, lo, hi };
-      const defaultPos = isToday ? Math.round(Math.max(0, Math.min(1000, (sun.now.getTime() - lo) / (hi - lo) * 1000))) : 500;
-      const pos = visitSliderPos[b.id] != null ? visitSliderPos[b.id] : defaultPos;
-      visitSliderPos[b.id] = pos;
-      const scrubTime = new Date(lo + (pos / 1000) * (hi - lo));
-      const zonePct = t => Math.max(0, Math.min(100, (t.getTime() - lo) / (hi - lo) * 100));
-      const nowPct = isToday ? zonePct(sun.now) : null;
-
-      const scrubHTML = `
-        <div class="visit-scrub">
-          <div class="visit-scrub-track">
-            <div class="visit-scrub-zone" style="left:${zonePct(sun.sunrise)}%;width:${Math.max(0, zonePct(sun.goldenHourEnd) - zonePct(sun.sunrise))}%"></div>
-            <div class="visit-scrub-zone" style="left:${zonePct(sun.goldenHour)}%;width:${Math.max(0, zonePct(sun.sunset) - zonePct(sun.goldenHour))}%"></div>
-            ${nowPct != null ? `<div class="visit-scrub-now" style="left:${nowPct}%"></div>` : ''}
-          </div>
-          <input type="range" class="visit-slider" min="0" max="1000" value="${pos}" data-input="visitslider" data-id="${b.id}" aria-label="Time of day">
-        </div>
-        <div class="visit-scrub-readout"><b id="visit-scrub-time-${b.id}">${fmtTime(scrubTime)}</b><span id="visit-scrub-label-${b.id}" class="muted"> — ${lightLabel(scrubTime, sun)}</span></div>`;
-
-      expandedHTML = `${dayTabsHTML}${scrubHTML}`;
+    } else {
+      const dayLabel = selDate.toLocaleDateString([], { weekday: 'long' });
+      noteHTML = `<b>Golden hour on ${dayLabel} at ${fmtTime(sun.goldenHour)}</b>` + (dayWeather ? ` — ${dayWeather} expected.` : '.');
     }
 
-    return `<div class="visit-widget${expanded ? ' open' : ''}">
-      <button class="visit-summary" data-act="visitexpand" data-id="${b.id}">
-        <span class="visit-icon-lg">${nowIcon}</span>
-        <span class="visit-main">
-          <b class="visit-temp">${nowTemp}</b>
-          <span class="visit-cond muted">${nowCond}</span>
-        </span>
-        <span class="visit-quick muted">${quickNote}</span>
-        <span class="visit-chevron">${expanded ? '︿' : '﹀'}</span>
-      </button>
-      ${expandedHTML}
+    const statusHTML = isToday
+      ? (w && w.current
+          ? `<span class="visit-icon">${WMO[w.current.weather_code] || '☀'}</span>${wmoLabel(w.current.weather_code)}, ${Math.round(w.current.temperature_2m)}°F`
+          : w && w.error ? `<span class="visit-icon">—</span>Weather unavailable` : `<span class="visit-icon">…</span>Loading…`)
+      : (w && w.daily
+          ? `<span class="visit-icon">${WMO[w.daily.weather_code[selIdx]] || '☀'}</span>${wmoLabel(w.daily.weather_code[selIdx])}, ${Math.round(w.daily.temperature_2m_max[selIdx])}°F high`
+          : `<span class="visit-icon">…</span>Loading…`);
+
+    let forecastHTML = '';
+    if (w && w.daily) {
+      const codes = w.daily.weather_code, highs = w.daily.temperature_2m_max, sunsets = w.daily.sunset, dates = w.daily.time;
+      const bestIdx = codes.reduce((best, c, i) => (i > 0 && c <= 2 && (best < 0 || c < codes[best])) ? i : best, -1);
+      forecastHTML = `<div class="forecast-row">${dates.map((d, i) => {
+        const day = i === 0 ? 'Today' : new Date(d + 'T12:00').toLocaleDateString([], { weekday: 'short' });
+        const sset = new Date(sunsets[i]);
+        return `<button class="forecast-day${i === bestIdx ? ' best' : ''}${i === selIdx ? ' sel' : ''}" data-act="visitday" data-id="${b.id}" data-i="${i}">
+          <div class="d">${day}</div>
+          <div class="icon">${WMO[codes[i]] || '☀'}</div>
+          <div class="t">${Math.round(highs[i])}°</div>
+          <div class="g">${fmtTime(sset)}</div>
+          ${i === bestIdx ? '<div class="badge-best">BEST</div>' : ''}
+        </button>`;
+      }).join('')}</div>`;
+    }
+
+    return `<div class="visit-card">
+      <div class="visit-top">
+        <div class="visit-status">${statusHTML}</div>
+      </div>
+      <div class="visit-bar">
+        ${isToday ? `<div class="visit-bar-fill" style="width:${pct(sun.now.getTime())}%"></div><div class="visit-bar-marker" style="left:${pct(sun.now.getTime())}%" data-label="NOW"></div>` : ''}
+        <div class="visit-bar-marker golden" style="left:${goldenPct}%" data-label="GOLDEN"></div>
+      </div>
+      <div class="visit-times"><span>${fmtTime(sun.sunrise)}</span><span>${fmtTime(sun.sunset)}</span></div>
+      <div class="visit-note"><span class="dot-live"></span><span>${noteHTML}</span></div>
+      ${forecastHTML}
     </div>`;
   }
 
@@ -1929,8 +1903,7 @@
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
-    visitexpand(d) { visitExpanded[d.id] = !visitExpanded[d.id]; render(); },
-    visitday(d) { visitDaySel[d.id] = +d.i; delete visitSliderPos[d.id]; render(); },
+    visitday(d) { visitDaySel[d.id] = +d.i; render(); },
     rmphoto(d) { draft.photos.splice(+d.i, 1); render(); },
     delvisit(d) {
       if (!delArmed) { delArmed = true; render(); return; }
@@ -1982,17 +1955,6 @@
     logq(el) { document.getElementById('logresults').innerHTML = logResults(el.value); },
     note(el) { draft.note = el.value; document.getElementById('note-count').textContent = el.value.length + ' / 280'; },
     date(el) { draft.date = el.value || isoDate(Date.now()); },
-    visitslider(el) {
-      const id = el.dataset.id, c = visitSunCache[id];
-      if (!c) return;
-      const pos = +el.value;
-      visitSliderPos[id] = pos;
-      const t = new Date(c.lo + (pos / 1000) * (c.hi - c.lo));
-      const timeEl = document.getElementById('visit-scrub-time-' + id);
-      const labelEl = document.getElementById('visit-scrub-label-' + id);
-      if (timeEl) timeEl.textContent = t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      if (labelEl) labelEl.textContent = ' — ' + lightLabel(t, c.sun);
-    },
     epbio(el) { document.getElementById('ep-bio-count').textContent = el.value.length + ' / 140'; },
   };
 
