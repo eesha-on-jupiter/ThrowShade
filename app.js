@@ -327,6 +327,9 @@
     // New sign-ups start with a random preset; the camera opens the full menu.
     if (!pickedPhoto) pickedPhoto = PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)];
     return `<div class="screen"><div class="signin">
+      <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
+      <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
+      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
       <div class="signin-avatar">
         <button class="avatar-edit" data-act="toggleavatars" aria-label="Choose a profile picture" aria-expanded="false"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('camera', 'sm')}</span></button>
         <div class="avatar-menu" id="su-avatar-menu" hidden>
@@ -337,9 +340,6 @@
           <input id="su-avatar-in" type="file" accept="image/*" hidden data-change="suavatar">
         </div>
       </div>
-      <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
-      <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
