@@ -152,6 +152,19 @@ button:active { transform: translateY(1px) scale(.94); }
 .card-head { display: flex; gap: 10px; align-items: center; }
 .card-head .who { flex-grow: 1; line-height: 1.25; min-width: 0; }
 .quote { line-height: 1.4; }
+
+/* ---------- Feed ---------- */
+.feed-card { border: 1.5px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--paper); }
+.feed-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px; }
+.feed-head b { cursor: pointer; }
+.feed-photo { aspect-ratio: 4 / 3; border-radius: 0; border-width: 0; }
+.feed-body { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.feed-title { font-size: 18px; font-weight: 700; line-height: 1.2; cursor: pointer; }
+.feed-note { margin-top: 6px; padding-left: 10px; border-left: 3px solid var(--accent); line-height: 1.4; }
+.feed-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.feed-heart .icon { stroke: var(--ink); }
+.feed-heart.on { background: var(--accent); border-color: var(--accent); }
+.feed-heart.on .icon { stroke: var(--paper); fill: var(--paper); }
 .avatar {
   width: 32px; height: 32px; border-radius: 16px; background: var(--avatar); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
