@@ -160,16 +160,25 @@
       return { b, score, reason, group, d };
     }).filter(x => x.reason);
     scored.sort((x, y) => y.score - x.score);
-    if (scored.length < (limit || 12)) {
-      const already = new Set(scored.map(x => x.b.id));
+    // Cap how many any one category can contribute, so friend-based recs (which score highest)
+    // don't crowd out every other reason — the point is a mix, not one dominant list.
+    const counts = {};
+    const capped = scored.filter(x => {
+      counts[x.group] = (counts[x.group] || 0) + 1;
+      return counts[x.group] <= (x.group === 'friends' ? 6 : 4);
+    });
+    const L = limit || 12;
+    if (capped.length < L) {
+      const already = new Set(capped.map(x => x.b.id));
       topRated(40).forEach(x => {
-        if (scored.length >= (limit || 12)) return;
+        if (capped.length >= L || (counts.top || 0) >= 4) return;
         if (visited.has(x.b.id) || already.has(x.b.id)) return;
-        scored.push({ b: x.b, score: 0, reason: 'Highly rated overall', group: 'top', d: distMap.get(x.b.id) });
+        capped.push({ b: x.b, score: 0, reason: 'Highly rated overall', group: 'top', d: distMap.get(x.b.id) });
+        counts.top = (counts.top || 0) + 1;
         already.add(x.b.id);
       });
     }
-    return scored.slice(0, limit || 12);
+    return capped.slice(0, L);
   }
   function recGroupLabel(g) {
     if (g.startsWith('style:')) return `More ${g.slice(6)} for you`;
