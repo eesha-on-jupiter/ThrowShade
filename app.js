@@ -16,7 +16,6 @@
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
   const LINE = '#c8c8c8';
-  const GOLD = '#ffb100';
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
 
   // ---------- Store ----------
@@ -122,6 +121,28 @@
     const s = size || 20;
     return `<svg class="icon" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
   }
+  // The wordmark's icon: a stepped tower half in solid ink, half in the app's signature diagonal shade.
+  function logoSVG(size) {
+    const s = size || 28;
+    const d = 'M6 21V14H8V8H10V3H14V8H16V14H18V21Z';
+    return `<svg class="logo-mark" viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true">
+      <clipPath id="lgShape"><path d="${d}"/></clipPath>
+      <clipPath id="lgRight"><rect x="12" y="0" width="12" height="24"/></clipPath>
+      <g clip-path="url(#lgShape)">
+        <rect width="24" height="24" fill="currentColor"/>
+        <g clip-path="url(#lgRight)">
+          <rect width="24" height="24" fill="var(--paper, #fff)"/>
+          <g stroke="currentColor" stroke-width="1.3">
+            <line x1="-12" y1="28" x2="28" y2="-12"/>
+            <line x1="-4" y1="28" x2="28" y2="-4"/>
+            <line x1="4" y1="28" x2="28" y2="4"/>
+            <line x1="-4" y1="20" x2="20" y2="-4"/>
+            <line x1="-4" y1="36" x2="36" y2="-4"/>
+          </g>
+        </g>
+      </g>
+    </svg>`;
+  }
 
   // ---------- Sound ----------
   const Sound = (() => {
@@ -153,11 +174,11 @@
   })();
   function starsHTML(n, size) {
     let s = '';
-    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(GOLD, GOLD) : starSVG('none', LINE);
+    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG('none', LINE);
     return `<span class="stars ${size || ''}" role="img" aria-label="${n} out of 5 stars">${s}</span>`;
   }
   function scoreHTML(val) {
-    return `<span class="score">${val}${starSVG(GOLD, GOLD)}</span>`;
+    return `<span class="score">${val}${starSVG(INK, INK)}</span>`;
   }
   // Hatching: architectural "shade" drawn in the building's style colour — stands in for a photo.
   function hatchURL(color) {
@@ -238,9 +259,9 @@
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
     return `<div class="screen"><div class="signin">
-      <div class="mark">THROWING<br>SHADE</div>
+      <div class="mark-group">${logoSVG(40)}<div class="mark">THROWING<br>SHADE</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="ph hatch-band" style="${hatch(INK)}"></div>
+      <div class="ph hatch-band" style="${hatch(INK)};color:var(--ink)">${logoSVG(72)}</div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
@@ -280,7 +301,7 @@
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar"><div class="wordmark">THROWING SHADE</div><button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>
+      <div class="topbar"><div class="wordmark-group">${logoSVG(24)}<div class="wordmark">THROWING SHADE</div></div><button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>
       <div class="toggle">
         <button class="${tab === 'feed' ? 'on' : ''}" data-go="#/feed">Feed</button>
         <button class="${tab === 'map' ? 'on' : ''}" data-go="#/map">Map</button>

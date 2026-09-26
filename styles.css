@@ -34,8 +34,8 @@
   --grid: #dcdcdc;
   --grid-bg: #efefef;
   --nav-h: 76px;
-  --accent: #ff5a36;
-  --accent-2: #ffb100;
+  --accent: #1f1f1f;
+  --accent-2: #1f1f1f;
   --r: 12px;
 }
 
@@ -86,7 +86,9 @@ b { font-weight: 700; }
 
 /* ---------- Header ---------- */
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px; gap: 8px; }
+.wordmark-group { display: flex; align-items: center; gap: 8px; }
 .wordmark { font-size: 16px; font-weight: 700; letter-spacing: .06em; }
+.logo-mark { flex-shrink: 0; display: block; }
 .h1 { font-size: 22px; font-weight: 700; }
 .h-building { font-size: 26px; font-weight: 700; line-height: 1.15; }
 
@@ -348,6 +350,7 @@ textarea.input { height: 120px; padding: 12px; resize: none; line-height: 1.4; }
 
 /* ---------- Sign in ---------- */
 .signin { padding: 32px 20px 24px; display: flex; flex-direction: column; gap: 18px; min-height: 100%; }
+.mark-group { display: flex; align-items: center; gap: 12px; }
 .signin .mark { font-size: 30px; font-weight: 700; letter-spacing: .06em; line-height: 1.05; }
 .hatch-band { height: 120px; }
 
