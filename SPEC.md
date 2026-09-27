@@ -70,7 +70,7 @@ Other routes: `#/find` (search places and people), `#/b/<id>` (place), `#/u/<id>
 | Find | Search field; Buildings tab (nearby when empty) and People tab with Follow buttons |
 | Log 1/2 — Throw Shade | Bottom sheet: search + nearby buildings with distance |
 | Log 2/2 — Your critique | Five star buttons with caption (Throwing shade → Pilgrimage-worthy), "What stood out?" aspect chips, date visited, up to 4 photos, 280-character critique, Post; Delete when editing |
-| Building | Photo (user's, else Wikimedia Commons with credit line), name, architect · year · typology · city, style chip, best-time-to-visit card (weather, golden hour, 5-day forecast), Community / Your rating, what people like, Throw Shade, Save, Directions, About (Wikipedia intro, address, coordinates, links to Wikipedia / OpenStreetMap / ArchDaily search / Dezeen search), Critiques / Photos tabs |
+| Building | Photo (user's, else Wikimedia Commons with credit line), name, architect · year · typology · city, style chip, community rating and your rating overlaid on the photo's bottom-right, fact icons, what people like (tags with counts), Throw Shade, Save, Directions, About (Wikipedia intro, address, coordinates, links to Wikipedia / OpenStreetMap / ArchDaily search / Dezeen search), Critiques / Photos tabs |
 | Lists | Want to Visit (private) plus custom lists, each with a thumbnail, place count and member avatars; "+" to create a list |
 | Save sheet | "Save" on any feed post or place opens it: tick Want to Visit or any of your lists, or create a new list and invite people inline |
 | List | Places with who added them; members row; invite sheet (members can view and add places) |
