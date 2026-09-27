@@ -390,6 +390,7 @@
     edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
     switch: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
     landmark: '<path d="M3 21h18M5 21v-9M9.7 21v-9M14.3 21v-9M19 21v-9M2.5 9 12 3.5 21.5 9z"/>',
@@ -536,7 +537,18 @@
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
-  let epPhoto;
+  let pickedPhoto;
+  // Profile picture chosen on sign-in or in Edit profile, applied on submit.
+  function setPicked(src) {
+    pickedPhoto = src;
+    document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+    const pv = document.getElementById('su-avatar');
+    if (pv) pv.style.backgroundImage = `url('${src}')`;
+  }
+  function randomAvatar(except) {
+    const pool = PRESET_AVATARS.filter(p => p !== except);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   const trail = [];
 
   // ---------- Views ----------
@@ -547,10 +559,14 @@
         <div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)}</div></div>
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
+    // New sign-ups start with a random preset; the refresh button rolls another.
+    if (!pickedPhoto) pickedPhoto = randomAvatar();
     return `<div class="screen"><div class="signin">
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
+      <div class="signin-avatar">
+        <button class="avatar-edit" data-act="shuffleavatar" aria-label="Try another profile picture"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('refresh', 'sm')}</span></button>
+      </div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
@@ -1042,12 +1058,11 @@
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
       <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="grow"></div>`}
-        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}</div>
+      </div>
       <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
-        ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
-          <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
-          : avatar(u, 'lg').replace('data-go', 'data-x')}
+        ${avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
+        ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
       </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
@@ -1141,10 +1156,13 @@
 
   function viewEditProfile() {
     const u = me();
+    // 15 random presets, always including the current one so it shows as selected.
+    const picks = PRESET_AVATARS.filter(p => p !== u.photo).sort(() => Math.random() - .5).slice(0, PRESET_AVATARS.includes(u.photo) ? 14 : 15);
+    if (PRESET_AVATARS.includes(u.photo)) picks.splice(Math.floor(Math.random() * 15), 0, u.photo);
     return sheet('Edit profile', 1, 1,
       `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
       `<div class="field"><div class="label">Profile picture</div>
-         <div class="avatar-picker">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
+         <div class="avatar-picker">${picks.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
        <div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
        <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
        <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
@@ -1926,7 +1944,8 @@
       if (state.users.some(u => u.handle === handle)) return toast('@' + handle + ' is taken');
       const id = 'u-' + Date.now().toString(36);
       const others = state.users.map(u => u.id);
-      state.users.push({ id, handle, name, bio: '' });
+      state.users.push(Object.assign({ id, handle, name, bio: '' }, pickedPhoto ? { photo: pickedPhoto } : {}));
+      pickedPhoto = undefined;
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.lists.filter(l => l.invitesNewUsers).forEach(l => l.members.push(id));
@@ -1935,7 +1954,7 @@
       go('#/feed');
       setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
-    login(d) { state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    login(d) { pickedPhoto = undefined; state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -2035,11 +2054,11 @@
     lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
     lbprev() { stepViewer(-1); },
     lbnext() { stepViewer(1); },
-    closeedit() { epPhoto = undefined; back(); },
-    // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
+    closeedit() { pickedPhoto = undefined; back(); },
+    // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
+    shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
     pickavatar(d, el) {
-      epPhoto = d.src;
-      document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+      setPicked(d.src);
       el.classList.add('on');
     },
     saveprofile() {
@@ -2051,8 +2070,8 @@
       if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
       if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
       u.name = name; u.handle = handle; u.bio = bio;
-      if (epPhoto) u.photo = epPhoto;
-      epPhoto = undefined;
+      if (pickedPhoto) u.photo = pickedPhoto;
+      pickedPhoto = undefined;
       save(); Sound.success();
       back(); toast('Profile updated');
     },
@@ -2206,13 +2225,6 @@
         else if (!url) toast('Couldn’t read one of those images');
         if (--pending === 0) render();
       }));
-    }
-    if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
-      resizeImage(e.target.files[0], 300, url => {
-        if (!url) return toast('Couldn’t read that image');
-        me().photo = url;
-        save(); Sound.success(); render();
-      });
     }
   });
   root.addEventListener('keydown', e => {
