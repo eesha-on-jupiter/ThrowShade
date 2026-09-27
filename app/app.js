@@ -83,8 +83,56 @@
     Contemporary: ['Design', 'Material', 'Context'], Historic: ['Craft', 'Detail', 'Facade'],
   };
 
+  // ---------- Backend sync ----------
+  // Best-effort mirror of writes to the FastAPI/SQLite backend (backend/).
+  // The app stays fully local-first and offline-capable: every call here is
+  // fire-and-forget and swallows its own errors, so a slow or absent backend
+  // never blocks a render. Comments, activity, badges/levels and Wrapped stay
+  // client-only — the backend doesn't model them (see backend/seed.py notes).
+  const API_BASE = window.TS_API_BASE || 'http://127.0.0.1:8000';
+  function apiFetch(path, opts) {
+    return fetch(API_BASE + path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts))
+      .catch(e => { console.warn('[throwShade] backend unreachable:', e.message); return null; });
+  }
+  const sync = {
+    createUser(u) { return apiFetch('/users', { method: 'POST', body: JSON.stringify({ id: u.id, handle: u.handle, name: u.name, bio: u.bio }) }); },
+    updateUser(u) { return apiFetch('/users/' + encodeURIComponent(u.id), { method: 'PUT', body: JSON.stringify({ handle: u.handle, name: u.name, bio: u.bio }) }); },
+    // Photos aren't mirrored — they're base64 data URLs and can be large; keeping the backend to the
+    // "simple data points" (stars, note, liked aspects, date) avoids bloating every rating request.
+    upsertVisit(v) { return apiFetch('/visits', { method: 'POST', body: JSON.stringify({ user_id: v.userId, place_id: v.buildingId, stars: v.stars, note: v.note, likes: v.likes, visited_on: v.visitedOn }) }); },
+    deleteVisit(userId, buildingId) { return apiFetch(`/visits?user_id=${encodeURIComponent(userId)}&place_id=${encodeURIComponent(buildingId)}`, { method: 'DELETE' }); },
+    follow(a, b) { return apiFetch('/follows', { method: 'POST', body: JSON.stringify({ follower_id: a, followee_id: b }) }); },
+    unfollow(a, b) { return apiFetch(`/follows?follower_id=${encodeURIComponent(a)}&followee_id=${encodeURIComponent(b)}`, { method: 'DELETE' }); },
+    want(userId, buildingId) { return apiFetch('/want', { method: 'POST', body: JSON.stringify({ user_id: userId, place_id: buildingId }) }); },
+    unwant(userId, buildingId) { return apiFetch(`/want?user_id=${encodeURIComponent(userId)}&place_id=${encodeURIComponent(buildingId)}`, { method: 'DELETE' }); },
+    createPlace(b) {
+      return apiFetch('/places', { method: 'POST', body: JSON.stringify({
+        id: b.id, kind: kindOf(b), name: b.name, architect: b.architect || null, year: b.year || null,
+        typology: b.typology || null, style: b.style || null, city: b.city || null, country: b.country || null,
+        lat: b.lat, lng: b.lng, address: b.address || null, osm: b.osm || null, qid: b.qid || null, added_by: b.addedBy || null,
+      }) });
+    },
+    createList(l) { return apiFetch('/lists', { method: 'POST', body: JSON.stringify({ id: l.id, name: l.name, owner_id: l.ownerId }) }); },
+    addListItem(listId, buildingId, addedBy) { return apiFetch(`/lists/${encodeURIComponent(listId)}/items`, { method: 'POST', body: JSON.stringify({ place_id: buildingId, added_by: addedBy }) }); },
+    removeListItem(listId, buildingId) { return apiFetch(`/lists/${encodeURIComponent(listId)}/items?place_id=${encodeURIComponent(buildingId)}`, { method: 'DELETE' }); },
+  };
+  // Builds the same shape as seed()/load() from GET /state, so a browser with
+  // no local save yet can hydrate from the shared backend instead of always
+  // reseeding its own independent copy of app/data.js.
+  function buildStateFromBackend(data) {
+    const pinned = data.places.filter(p => p.source !== 'seed');
+    pinned.forEach(registerBuilding);
+    const users = data.users.map(u => {
+      const seedU = window.TS_SEED_USERS.find(s => s.id === u.id);
+      return (seedU && seedU.photo && !u.photo) ? Object.assign({}, u, { photo: seedU.photo }) : u;
+    });
+    return { me: null, users, follows: data.follows, visits: data.visits, want: data.want, places: pinned, lists: data.lists, activity: [], activitySeen: {} };
+  }
+
   // ---------- Store ----------
-  let state = load() || seed();
+  let state = load();
+  const freshInstall = !state;
+  if (!state) state = seed();
   state.places.forEach(registerBuilding);
   // Older saves stored a single `photo` per log and no liked aspects.
   state.visits.forEach(v => {
@@ -2434,6 +2482,7 @@
     state.places.push(b);
     registerBuilding(b);
     save();
+    sync.createPlace(b);
     mapSel = b.id; mapFocus = true;
     go('#/log/' + b.id);
   }
@@ -2677,12 +2726,15 @@
       if (state.users.some(u => u.handle === handle)) return toast('@' + handle + ' is taken');
       const id = 'u-' + Date.now().toString(36);
       const others = state.users.map(u => u.id);
-      state.users.push(Object.assign({ id, handle, name, bio: '' }, pickedPhoto ? { photo: pickedPhoto } : {}));
+      const newUser = Object.assign({ id, handle, name, bio: '' }, pickedPhoto ? { photo: pickedPhoto } : {});
+      state.users.push(newUser);
       pickedPhoto = undefined;
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.lists.filter(l => l.invitesNewUsers).forEach(l => l.members.push(id));
       state.me = id; save();
+      sync.createUser(newUser);
+      others.forEach(o => { sync.follow(id, o); sync.follow(o, id); });
       Sound.success();
       go('#/feed');
       setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
@@ -2701,20 +2753,22 @@
     want(d) {
       const i = state.want.findIndex(w => w.userId === state.me && w.buildingId === d.id);
       Sound.tap();
-      if (i >= 0) { state.want.splice(i, 1); toast('Removed from Want to Visit'); }
-      else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); toast('Saved to Want to Visit'); }
+      if (i >= 0) { state.want.splice(i, 1); toast('Removed from Want to Visit'); sync.unwant(state.me, d.id); }
+      else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); toast('Saved to Want to Visit'); sync.want(state.me, d.id); }
       save(); render();
     },
     togglewant(d, el) {
       const i = state.want.findIndex(w => w.userId === state.me && w.buildingId === d.id);
-      if (i >= 0) state.want.splice(i, 1); else state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() });
+      if (i >= 0) { state.want.splice(i, 1); sync.unwant(state.me, d.id); }
+      else { state.want.push({ userId: state.me, buildingId: d.id, createdAt: Date.now() }); sync.want(state.me, d.id); }
       el.classList.toggle('on', i < 0);
       Sound.tap(); save();
     },
     togglelist(d, el) {
       const l = state.lists.find(x => x.id === d.list); if (!l) return;
       const i = l.items.findIndex(it => it.buildingId === d.id);
-      if (i >= 0) l.items.splice(i, 1); else l.items.push({ buildingId: d.id, addedBy: state.me, createdAt: Date.now() });
+      if (i >= 0) { l.items.splice(i, 1); sync.removeListItem(l.id, d.id); }
+      else { l.items.push({ buildingId: d.id, addedBy: state.me, createdAt: Date.now() }); sync.addListItem(l.id, d.id, state.me); }
       el.classList.toggle('on', i < 0);
       Sound.tap(); save();
     },
@@ -2737,6 +2791,8 @@
       const n = inviteSel.size;
       inviteSel = new Set(); newListPublic = false;
       save(); Sound.success();
+      sync.createList(l);
+      if (d.bid) sync.addListItem(l.id, d.bid, state.me);
       if (d.bid) render(); else location.replace('#/list/' + l.id);
       setTimeout(() => toast(`Created “${name}”` + (n ? ` · invited ${n}` : '')), 30);
     },
@@ -2752,12 +2808,13 @@
       const l = state.lists.find(x => x.id === d.list); if (!l) return;
       l.items = l.items.filter(it => it.buildingId !== d.id);
       save(); render();
+      sync.removeListItem(l.id, d.id);
     },
-    unwant(d) { state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === d.id)); save(); render(); },
+    unwant(d) { state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === d.id)); save(); render(); sync.unwant(state.me, d.id); },
     follow(d) {
       const i = state.follows.findIndex(f => f[0] === state.me && f[1] === d.id);
-      if (i >= 0) state.follows.splice(i, 1);
-      else { state.follows.push([state.me, d.id]); logActivity(d.id, 'follow', { fromUid: state.me }); }
+      if (i >= 0) { state.follows.splice(i, 1); sync.unfollow(state.me, d.id); }
+      else { state.follows.push([state.me, d.id]); logActivity(d.id, 'follow', { fromUid: state.me }); sync.follow(state.me, d.id); }
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
     },
@@ -2861,6 +2918,7 @@
       if (pickedPhoto) u.photo = pickedPhoto;
       pickedPhoto = undefined;
       save(); Sound.success();
+      sync.updateUser(u);
       back(); toast('Profile updated');
     },
     droppin() {
@@ -2933,6 +2991,7 @@
       delArmed = false;
       state.visits = state.visits.filter(v => !(v.userId === state.me && v.buildingId === d.id));
       save();
+      sync.deleteVisit(state.me, d.id);
       draft = null;
       trail.push('/b/' + d.id);
       location.replace('#/b/' + d.id);
@@ -2966,6 +3025,7 @@
         save();
         msg = 'Saved without photos — browser storage is full';
       }
+      sync.upsertVisit(myVisit(draft.bid));
       Sound.success();
       const bid = draft.bid;
       draft = null;
@@ -3027,4 +3087,16 @@
   window.addEventListener('hashchange', render);
   if (!load()) save();
   render();
+
+  // First-ever visit in this browser: try to hydrate from the shared backend
+  // (if reachable) instead of staying on the independently-seeded local copy.
+  // Renders again only if the backend actually answered with data.
+  if (freshInstall) {
+    apiFetch('/state').then(r => r && r.ok ? r.json() : null).then(data => {
+      if (!data || !data.users || !data.users.length) return;
+      state = buildStateFromBackend(data);
+      save();
+      render();
+    });
+  }
 })();
