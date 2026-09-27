@@ -1377,9 +1377,9 @@
       html: `<div class="w-card">
           <div style="display:flex;align-items:center;gap:12px">${avatar(u, 'md').replace('data-go', 'data-x')}<div class="grow"><b>${esc(u.name)}</b><div class="small muted">throwShade Wrapped ${year}</div></div></div>
           <div class="w-card-grid">
-            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div class="ellipsis"><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
+            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
             <div><div class="caps">Top style</div><div><b>${esc(styles[0][0])}</b></div>
-              <div class="caps" style="margin-top:8px">Architect</div><div class="ellipsis"><b>${esc(architects[0][0])}</b></div></div>
+              <div class="caps" style="margin-top:8px">Architect</div><div><b>${esc(architects[0][0])}</b></div></div>
             <div><div class="caps">Logged</div><div class="w-card-num">${vs.length}</div></div>
             <div><div class="caps">Critic type</div><div><b>${persona}</b></div></div>
           </div>
@@ -1425,57 +1425,84 @@
   // Story-sized (1080×1920) PNG of the summary card, drawn on a canvas so it can be saved or posted.
   async function wrapImage(uid) {
     const w = wrapSummary(uid);
-    const W = 1080, H = 1920, F = '"IBM Plex Sans", system-ui, sans-serif';
+    const W = 1080, F = '"IBM Plex Sans", system-ui, sans-serif';
     try { await Promise.all([document.fonts.load('700 40px "IBM Plex Sans"'), document.fonts.load('400 40px "IBM Plex Sans"')]); } catch (e) {}
+    const img = w.u.photo ? await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; }) : null;
     const c = document.createElement('canvas');
-    c.width = W; c.height = H;
+    c.width = W; c.height = 1920;
     const x = c.getContext('2d');
-    const fit = (t, max) => {
-      if (x.measureText(t).width <= max) return t;
-      while (t.length > 1 && x.measureText(t + '…').width > max) t = t.slice(0, -1);
-      return t + '…';
+    // Word-wrap to a width; a single word wider than the line is split by characters.
+    const lines = (t, max) => {
+      const out = [];
+      let cur = '';
+      String(t).split(/\s+/).filter(Boolean).forEach(word => {
+        const test = cur ? cur + ' ' + word : word;
+        if (x.measureText(test).width <= max) { cur = test; return; }
+        if (cur) out.push(cur);
+        while (x.measureText(word).width > max) {
+          let i = word.length;
+          while (i > 1 && x.measureText(word.slice(0, i)).width > max) i--;
+          out.push(word.slice(0, i)); word = word.slice(i);
+        }
+        cur = word;
+      });
+      if (cur) out.push(cur);
+      return out;
     };
-    const round = (l, t, rw, rh, r) => { x.beginPath(); x.roundRect(l, t, rw, rh, r); };
+    const L = 110, CW = W - 2 * L, col2 = L + CW / 2 + 10;
 
-    x.fillStyle = w.color; x.fillRect(0, 0, W, H);
-    x.fillStyle = 'rgba(255,255,255,.85)'; x.textAlign = 'center';
-    x.font = `700 38px ${F}`; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+    // Two passes: measure to size the canvas and card, then draw.
+    const layout = card => {
+      const draw = !!card;
+      const text = (font, color, t, left, y, max, lh) => {
+        x.font = font; x.fillStyle = color;
+        const ls = lines(t, max);
+        if (draw) ls.forEach((l, i) => x.fillText(l, left, y + i * lh));
+        return y + (ls.length - 1) * lh;
+      };
+      const caps = (t, left, y) => { if (draw) { x.font = `700 28px ${F}`; x.fillStyle = '#a1a1a6'; x.fillText(t.toUpperCase(), left, y); } };
+      x.textAlign = 'center';
+      if (draw) {
+        x.fillStyle = w.color; x.fillRect(0, 0, W, c.height);
+        x.font = `700 38px ${F}`; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+        x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
+        if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
+        else { x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic'; }
+        x.restore();
+        x.fillStyle = '#fff'; x.beginPath(); x.roundRect(L, card.T, CW, card.bottom - card.T, 48); x.fill();
+      }
+      let y = text(`700 76px ${F}`, '#fff', w.u.name, W / 2, 650, 900, 86);
+      y = text(`400 40px ${F}`, 'rgba(255,255,255,.8)', '@' + w.u.handle, W / 2, y + 62, 900, 48);
 
-    // Avatar
-    x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
-    if (w.u.photo) {
-      const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; });
-      if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
-    } else {
-      x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic';
-    }
-    x.restore();
-    x.fillStyle = '#fff'; x.font = `700 76px ${F}`; x.fillText(fit(w.u.name, 900), W / 2, 650);
-    x.fillStyle = 'rgba(255,255,255,.8)'; x.font = `400 40px ${F}`; x.fillText('@' + w.u.handle, W / 2, 712);
-
-    // Card
-    const L = 110, CW = W - 2 * L, T = 790, CH = 880;
-    x.fillStyle = '#fff'; round(L, T, CW, CH, 48); x.fill();
-    x.textAlign = 'left';
-    const caps = (t, l, top) => { x.fillStyle = '#a1a1a6'; x.font = `700 28px ${F}`; x.fillText(t.toUpperCase(), l, top); };
-    caps('Top buildings', L + 60, T + 90);
-    w.bs.slice(0, 5).forEach((b, i) => {
-      const y = T + 160 + i * 66;
-      x.fillStyle = INK; x.font = `700 44px ${F}`; x.fillText(String(i + 1), L + 60, y);
-      x.font = `400 42px ${F}`; x.fillText(fit(b.name, CW - 180), L + 120, y);
-    });
-    const gy = T + 540, col2 = L + CW / 2 + 10;
-    x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2);
-    caps('Logged', L + 60, gy);
-    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(String(w.vs.length), L + 60, gy + 100);
-    caps('Average', col2, gy);
-    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
-    caps('Top style', L + 60, gy + 190);
-    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.style, CW / 2 - 90), L + 60, gy + 245);
-    caps('Critic type', col2, gy + 190);
-    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.persona, CW / 2 - 70), col2, gy + 245);
-
-    x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = `700 56px ${F}`; x.fillText('throwShade', W / 2, 1800);
+      const T = y + 78;
+      x.textAlign = 'left';
+      caps('Top buildings', L + 60, T + 90);
+      y = T + 160;
+      w.bs.slice(0, 5).forEach((b, i) => {
+        if (draw) { x.font = `700 44px ${F}`; x.fillStyle = INK; x.fillText(String(i + 1), L + 60, y); }
+        y = text(`400 42px ${F}`, INK, b.name, L + 120, y, CW - 180, 52) + 66;
+      });
+      const gy = y + 34;
+      if (draw) { x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2); }
+      caps('Logged', L + 60, gy);
+      caps('Average', col2, gy);
+      if (draw) {
+        x.font = `700 96px ${F}`; x.fillStyle = INK;
+        x.fillText(String(w.vs.length), L + 60, gy + 100);
+        x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
+      }
+      caps('Top style', L + 60, gy + 190);
+      caps('Critic type', col2, gy + 190);
+      const a = text(`700 42px ${F}`, INK, w.style, L + 60, gy + 245, CW / 2 - 90, 52);
+      const b = text(`700 42px ${F}`, INK, w.persona, col2, gy + 245, L + CW - 60 - col2, 52);
+      const bottom = Math.max(a, b) + 70;
+      const foot = Math.max(1800, bottom + 130);
+      if (draw) { x.textAlign = 'center'; x.font = `700 56px ${F}`; x.fillStyle = '#fff'; x.fillText('throwShade', W / 2, foot); }
+      return { T, bottom, height: foot + 120 };
+    };
+    const card = layout(null);
+    if (card.height > c.height) c.height = card.height;
+    layout(card);
     return new Promise(res => c.toBlob(res, 'image/png'));
   }
 
@@ -1499,7 +1526,9 @@
     if (wrapShare && wrapShare.uid !== uid) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
     if (!wrapShare) {
       const blob = await wrapImage(uid);
-      wrapShare = { uid, blob, url: URL.createObjectURL(blob) };
+      // A data: URL downloads as a real .png everywhere; some mobile browsers mangle blob: downloads.
+      const dataURL = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+      wrapShare = { uid, blob, dataURL, url: URL.createObjectURL(blob) };
     }
     const pv = sheet.querySelector('.wrap-sheet-preview');
     if (pv) pv.innerHTML = `<img src="${wrapShare.url}" alt="Wrapped share image">`;
@@ -1510,11 +1539,21 @@
     host.querySelectorAll('.wrap-sheet, .wrap-sheet-bg').forEach(el => el.remove());
   }
   function wrapDownload() {
-    if (!wrapShare) return false;
+    if (!wrapShare) { toast('Still making the image — try again in a second'); return false; }
     const a = document.createElement('a');
-    a.href = wrapShare.url; a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
+    a.href = wrapShare.dataURL; a.type = 'image/png';
+    a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     return true;
+  }
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // On a phone try the app first and fall back to the website if nothing took over the screen.
+  function openTarget(web, app) {
+    if (app && isMobile()) {
+      const t = setTimeout(() => { if (!document.hidden) location.href = web; }, 1500);
+      document.addEventListener('visibilitychange', () => clearTimeout(t), { once: true });
+      location.href = app;
+    } else window.open(web, '_blank', 'noopener');
   }
   function wrapFile() {
     return wrapShare ? new File([wrapShare.blob], `throwshade-wrapped-${user(wrapShare.uid).handle}.png`, { type: 'image/png' }) : null;
@@ -2470,20 +2509,20 @@
       const w = wrapSummary(wrapUid);
       const u = encodeURIComponent(w.link), t = encodeURIComponent(w.text);
       if (d.to === 'instagram') {
-        // No web intent for Instagram: hand the image to the phone's share sheet, else save it for posting.
-        const file = wrapFile();
-        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file] }).catch(() => {});
-        else if (wrapDownload()) toast('Image saved — post it to your Instagram story');
+        // Instagram has no web share link: save the image, then open Instagram to post it.
+        if (!wrapDownload()) return;
+        toast('Image saved — opening Instagram');
+        setTimeout(() => openTarget('https://www.instagram.com/', 'instagram://camera'), 700);
         return;
       }
       const urls = {
         facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
-        x: `https://twitter.com/intent/tweet?text=${t}&url=${u}`,
-        threads: `https://www.threads.net/intent/post?text=${t}%20${u}`,
+        x: `https://x.com/intent/post?text=${t}&url=${u}`,
+        threads: `https://www.threads.com/intent/post?text=${t}%20${u}`,
         whatsapp: `https://wa.me/?text=${t}%20${u}`,
-        line: `https://social-plugins.line.me/lineit/share?url=${u}&text=${t}`,
+        line: `https://line.me/R/share?text=${t}%20${u}`,
       };
-      if (urls[d.to]) window.open(urls[d.to], '_blank', 'noopener');
+      if (urls[d.to]) openTarget(urls[d.to]);
     },
     sharemore() {
       const w = wrapSummary(wrapUid), file = wrapFile();
