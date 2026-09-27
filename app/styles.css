@@ -33,7 +33,7 @@
   --float: 0 4px 20px rgba(28, 28, 30, .10);
   --grid: #ececea;
   --grid-bg: #f6f6f4;
-  --nav-h: 72px;
+  --nav-h: 86px; /* floating bar (62px) + 12px gap + breathing room */
   --muted: var(--text-2); /* used by inline styles in app.js */
 }
 
@@ -275,21 +275,21 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
   display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
 }
 
-/* ---------- Bottom nav ---------- */
+/* ---------- Bottom nav: floating, icons only ---------- */
 .nav {
-  position: absolute; left: 0; right: 0; bottom: 0; height: var(--nav-h); z-index: 20;
-  background: var(--paper); border-top: 1px solid var(--line);
-  display: flex; justify-content: space-around; align-items: center; padding-bottom: 4px;
-  font-size: 10.5px; font-weight: 500;
+  position: absolute; left: 14px; right: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); height: 62px; z-index: 20;
+  background: rgba(255, 255, 255, .96); border-radius: 22px;
+  box-shadow: 0 8px 28px rgba(28, 28, 30, .14), 0 0 0 1px rgba(28, 28, 30, .05);
+  display: flex; justify-content: space-around; align-items: center; padding: 0 6px;
 }
-.nav a { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-3); min-width: 56px; }
-.nav a .i { width: 22px; height: 22px; }
+.nav a { position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text-3); border-radius: 14px; }
+.nav a .i { width: 23px; height: 23px; }
 .nav a.on { color: var(--ink); }
-.nav .plus {
-  width: 46px; height: 46px; border-radius: 14px; background: var(--ink); color: var(--paper);
-  display: flex; align-items: center; justify-content: center; min-width: 0;
-}
+.nav a.on:not(.plus)::after { content: ''; position: absolute; bottom: 5px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: var(--ink); }
+.nav .plus { width: 50px; height: 50px; border-radius: 16px; background: var(--ink); color: var(--paper); }
+.nav .plus.on { color: var(--paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--ink); }
 .nav .plus .i { width: 24px; height: 24px; }
+svg.i.px { image-rendering: pixelated; }
 
 /* ---------- Bottom sheet (log flow) ---------- */
 .scrim { position: absolute; inset: 0; background: var(--board); }
@@ -535,7 +535,6 @@ button.shot { border: 0; padding: 0; cursor: zoom-in; display: block; width: 100
 .lb-credit { font-size: 11px; opacity: .7; padding: 0 20px 22px; text-align: center; }
 .lb-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .find-section { margin: 16px 0 2px; }
-.nav .plus.on { color: var(--paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--ink); }
 
 /* ---------- Facts: small icons under a place's name, details in About ---------- */
 .fact-icons { display: flex; gap: 6px; margin-top: 10px; padding: 0; }
