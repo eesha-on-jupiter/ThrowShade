@@ -16,6 +16,20 @@
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
   const LINE = '#dcdad4';
+  // Theme: 'light' / 'dark' when picked on the profile, otherwise follow the system.
+  const THEME_KEY = 'throwingshade.theme';
+  const systemDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  function currentTheme() {
+    let t = null;
+    try { t = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked */ }
+    return t === 'light' || t === 'dark' ? t : (systemDark() ? 'dark' : 'light');
+  }
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = t === 'dark' ? '#121213' : '#ffffff';
+  }
+  applyTheme(currentTheme());
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
   // What a rater liked — toggled as chips in the log sheet, shown on the feed and summed per place.
   const ASPECTS = ['Design', 'Material', 'Structure', 'Facade', 'Light', 'Space', 'Interior', 'Detail', 'Craft',
@@ -439,11 +453,11 @@
   }
   function starsHTML(n, size) {
     let s = '';
-    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG(INK, INK) : starSVG(LINE, LINE);
+    for (let i = 1; i <= 5; i++) s += i <= n ? starSVG('currentColor', 'currentColor') : starSVG('currentColor', 'currentColor').replace('<svg ', '<svg class="off" ');
     return `<span class="stars ${size || ''}" role="img" aria-label="${n} out of 5 stars">${s}</span>`;
   }
   function scoreHTML(val) {
-    return `<span class="score">${val}${starSVG(INK, INK)}</span>`;
+    return `<span class="score">${val}${starSVG('currentColor', 'currentColor')}</span>`;
   }
 
   // Line icons, paths after Lucide (ISC licence) — drawn with currentColor so they follow the text colour.
@@ -482,6 +496,8 @@
     ticket: '<path d="M3 8.5a2 2 0 0 0 0 4V16a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3.5a2 2 0 0 1 0-4V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" transform="translate(0 2)"/><path d="M14 6v2M14 11v2M14 16v2"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
     sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
     flame: '<path d="M12 22a6 6 0 0 0 6-6c0-3-2-4.5-3-7-0.5 1.5-1.5 2.5-2.5 2.5C13 9 13.5 6 11 2c0 4-4 6-5.5 9.5A6.8 6.8 0 0 0 5 14a7 7 0 0 0 7 8z"/>',
@@ -1163,8 +1179,8 @@
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
         <button class="btn-sq left" data-act="back" aria-label="Back">${icon('back')}</button>
         <div class="hero-ratings">
-          <span class="hero-rating" title="Community rating">${a.avg ? `${starSVG(INK, INK)}<b>${a.avg.toFixed(1)}</b><span class="muted">· ${a.n} log${a.n === 1 ? '' : 's'}</span>` : '<span class="muted">No ratings yet</span>'}</span>
-          ${mv ? `<span class="hero-rating mine" title="Your rating">You ${starSVG('#fff', '#fff')}<b>${mv.stars}</b></span>` : ''}
+          <span class="hero-rating" title="Community rating">${a.avg ? `${starSVG('currentColor', 'currentColor')}<b>${a.avg.toFixed(1)}</b><span class="muted">· ${a.n} log${a.n === 1 ? '' : 's'}</span>` : '<span class="muted">No ratings yet</span>'}</span>
+          ${mv ? `<span class="hero-rating mine" title="Your rating">You ${starSVG('currentColor', 'currentColor')}<b>${mv.stars}</b></span>` : ''}
         </div>` })}
       ${credit}
       <div class="pad stack" style="padding-top:16px">
@@ -1304,6 +1320,7 @@
           </div></div>
         <div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div>
         `}
+        ${own ? `<button class="theme-toggle ${currentTheme() === 'dark' ? 'on' : ''}" data-act="theme" aria-pressed="${currentTheme() === 'dark'}">${icon(currentTheme() === 'dark' ? 'moon' : 'sun')}<b class="grow">Dark mode</b><span class="switch"></span></button>` : ''}
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
@@ -1937,7 +1954,7 @@
         ? { bid, stars: mv.stars, note: mv.note || '', date: mv.visitedOn, photos: mv.photos.slice(), likes: mv.likes.slice() }
         : { bid, stars: 0, note: '', date: isoDate(Date.now()), photos: [], likes: [] };
     }
-    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6')}</button>`).join('');
+    const starBtns = [1, 2, 3, 4, 5].map(n => `<button data-act="star" data-n="${n}" class="${n <= draft.stars ? 'on' : ''}" aria-label="${n} star${n > 1 ? 's' : ''}">${n <= draft.stars ? starSVG('currentColor', 'currentColor') : starSVG('none', 'currentColor')}</button>`).join('');
     const editing = !!myVisit(bid);
     return sheet('Your critique', 2, 2,
       `<button class="btn-sq thin" data-go="#/log" aria-label="Back">${icon('back')}</button>`,
@@ -2688,6 +2705,11 @@
       setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
     login(d) { pickedPhoto = undefined; state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    theme() {
+      const t = currentTheme() === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* storage blocked: still switch for this visit */ }
+      applyTheme(t); render();
+    },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -2920,7 +2942,7 @@
       document.querySelectorAll('#star-input button').forEach((btn, i) => {
         const on = i < draft.stars;
         btn.classList.toggle('on', on);
-        btn.innerHTML = on ? starSVG('#fff', '#fff') : starSVG('none', '#a1a1a6');
+        btn.innerHTML = on ? starSVG('currentColor', 'currentColor') : starSVG('none', 'currentColor');
         if (on) { btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
