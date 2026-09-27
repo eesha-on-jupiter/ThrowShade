@@ -544,6 +544,7 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
+  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer;
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -618,23 +619,44 @@
       const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
-      const typeLabel = KIND_LABEL[mapKind] + (mapStyle !== 'all' ? ` · ${mapStyle}` : '');
+      const rpill = (k, label) => `<button class="pill ${mapMinRating === k ? 'on' : ''}" data-act="mapminrating" data-k="${k}">${label}</button>`;
+      const items = mapBuildings();
+      const listBody = mapMode === 'list' ? `<div class="screen" style="position:static;flex:1;overflow-y:auto"><div class="stack-6 pad">
+          ${rankByRating(items.map(x => x.b)).length ? rankByRating(items.map(x => x.b)).map((b, i) => {
+            const a = avgFor(b.id);
+            return `<button class="row" data-go="#/b/${b.id}">
+              <span class="rank">${i + 1}</span>
+              ${ph(b, { style: 'width:44px;height:44px', go: false })}
+              <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(makerLine(b))}</div></div>
+              ${a.avg ? scoreHTML(a.avg.toFixed(1)) : '<span class="small muted">No logs</span>'}
+            </button>`;
+          }).join('') : `<div class="empty">Nothing matches these filters.</div>`}
+        </div></div>` : '';
+      const typeLabel = KIND_LABEL[mapKind] + (mapStyle !== 'all' ? ` · ${mapStyle}` : '') + (mapMinRating ? ` · ${mapMinRating}★+` : '');
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
+        <div class="pad" style="padding-bottom:8px"><div class="input-wrap">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div></div>
+        <div class="seg" style="margin:0 20px 10px">
+          <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
+          <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
+        </div>
         <div class="pills">
-          <button class="pill ${mapKindOpen || mapStyle !== 'all' ? 'on' : ''}" data-act="mapkindtoggle">${mapStyle !== 'all' ? `<span class="dot" style="background:${STYLES[mapStyle]}"></span>` : ''}${typeLabel}${icon('chevron', 'sm')}</button>
+          <button class="pill ${mapKindOpen || mapStyle !== 'all' || mapMinRating ? 'on' : ''}" data-act="mapkindtoggle">${mapStyle !== 'all' ? `<span class="dot" style="background:${STYLES[mapStyle]}"></span>` : ''}${typeLabel}${icon('chevron', 'sm')}</button>
           <span class="pill-sep"></span>
           ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
         </div>
         ${mapKindOpen ? `
         <div class="map-filters">
           <div class="pills" style="padding:0 0 10px">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>
+          <div class="caps" style="margin-bottom:6px">Rating</div>
+          <div class="pills" style="padding:0 0 10px">${rpill(0, 'Any')}${rpill(3, '3★+')}${rpill(4, '4★+')}${rpill(4.5, '4.5★+')}</div>
           <div class="caps" style="margin-bottom:6px">Styles</div>
           <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<button class="legend-row${mapStyle === s ? ' on' : ''}" data-act="mapstyle" data-k="${s}"><span class="dot" style="background:${c}"></span> ${s}</button>`).join('')}
             <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
             <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
         </div>` : ''}
-        <div class="map-wrap" style="position:relative;flex:1">
+        ${listBody}
+        <div class="map-wrap" style="position:relative;flex:1;display:${mapMode === 'list' ? 'none' : 'block'}">
           <div id="map"></div>
           <button class="btn-sq map-heatbtn ${mapHeat ? 'on' : ''}" data-act="toggleheat" aria-label="Toggle heatmap">${icon('flame')}</button>
           <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
@@ -1615,6 +1637,7 @@
     if (map) { map.remove(); map = null; mapMarkers = {}; heatLayer = null; }
     if (pinMap) { pinMap.remove(); pinMap = null; }
     if (beenMap) { beenMap.remove(); beenMap = null; }
+    clusterGroup = null; heatLayer = null;
     pinMode = false;
   }
   function setPinMode(on) {
@@ -1641,6 +1664,8 @@
     if (mapFilter === 'friends') list = list.filter(b => friends.has(b.id));
     if (mapKind !== 'all') list = list.filter(b => kindOf(b) === mapKind);
     if (mapStyle !== 'all') list = list.filter(b => b.style === mapStyle);
+    if (mapMinRating > 0) list = list.filter(b => (avgFor(b.id).avg || 0) >= mapMinRating);
+    if (mapQ.trim()) { const q = mapQ.trim().toLowerCase(); list = list.filter(b => [b.name, b.city, b.architect].filter(Boolean).join(' ').toLowerCase().includes(q)); }
     return list.map(b => ({ b, kind: mapFilter === 'friends' && kind(b) === 'other' ? 'been' : kind(b) }));
   }
   function pinIcon(b, kind) {
@@ -1672,19 +1697,19 @@
     window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
-    // Zoomed out, pins overlap too much to tell apart — the first tap zooms in on that spot
-    // instead of opening the card, so it reads as "zoom into this cluster" not "pick this pin".
-    const ZOOM_SELECT = 15;
+    clusterGroup = window.L.markerClusterGroup ? window.L.markerClusterGroup({ maxClusterRadius: 46, spiderfyOnMaxZoom: true, showCoverageOnHover: false }) : null;
+    const target = clusterGroup || map;
     items.forEach(({ b, kind }) => {
-      const m = window.L.marker([b.lat, b.lng], { icon: pinIcon(b, kind) }).addTo(map);
+      const m = window.L.marker([b.lat, b.lng], { icon: pinIcon(b, kind) });
       m.on('click', () => {
-        if (map.getZoom() < ZOOM_SELECT) { map.flyTo([b.lat, b.lng], ZOOM_SELECT, { duration: .5 }); return; }
         const prev = mapSel; mapSel = b.id;
         [prev, b.id].forEach(id => { const r = mapMarkers[id]; if (r) r.marker.setIcon(pinIcon(r.b, r.kind)); });
         renderMapCard();
       });
       mapMarkers[b.id] = { marker: m, b, kind };
+      target.addLayer(m);
     });
+    if (clusterGroup) map.addLayer(clusterGroup);
     if (mapHeat && window.L.heatLayer) {
       const fids = followingIds(state.me);
       // Snapchat-style glow: everyone's logs light up a spot, friends' logs light it up brighter.
@@ -2239,7 +2264,7 @@
     switch (seg[0]) {
       case 'signin': html = viewSignin(); break;
       case 'feed': html = viewHome('feed'); break;
-      case 'map': html = viewHome('map'); after = initMap; break;
+      case 'map': html = viewHome('map'); if (mapMode !== 'list') after = initMap; break;
       case 'find': html = viewFind(); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
       case 'list': html = seg[1] === 'want' ? viewWantList() : seg[1] === 'been' ? viewBeenList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
@@ -2377,6 +2402,8 @@
     mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
     mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapKindOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
+    mapmode(d) { mapMode = d.k; render(); },
+    mapminrating(d) { mapMinRating = +d.k; mapKindOpen = false; mapSel = null; render(); },
     locate() {
       requestLocation(ok => {
         if (!ok) toast('Location unavailable — using ' + loc.label);
@@ -2563,6 +2590,15 @@
 
   const inputs = {
     find(el) { findQ = el.value; document.getElementById('results').innerHTML = findResults(); },
+    mapq(el) {
+      mapQ = el.value; clearTimeout(mapQTimer);
+      // The map re-renders with the filtered pins; put the cursor back where it was.
+      mapQTimer = setTimeout(() => {
+        render();
+        const q = document.querySelector('[data-input=mapq]');
+        if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+      }, 300);
+    },
     logq(el) { document.getElementById('logresults').innerHTML = logResults(el.value); },
     note(el) { draft.note = el.value; document.getElementById('note-count').textContent = el.value.length + ' / 280'; },
     date(el) { draft.date = el.value || isoDate(Date.now()); },
