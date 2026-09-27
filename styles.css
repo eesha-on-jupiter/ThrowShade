@@ -139,6 +139,7 @@ button:active, .row:active { opacity: .6; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { box-shadow: inset 0 0 0 1px var(--line-2); border-radius: 999px; padding: 4px 11px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .chip.dashed { box-shadow: none; background: var(--fill); }
+.chip.on { background: var(--ink); color: var(--paper); box-shadow: none; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 /* ---------- Top rated rail ---------- */
@@ -292,6 +293,7 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .nav .plus { width: 50px; height: 50px; border-radius: 16px; background: var(--ink); color: var(--paper); }
 .nav .plus.on { color: var(--paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--ink); }
 .nav .plus .i { width: 24px; height: 24px; }
+.nav-dot { position: absolute; top: 7px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); border: 1.5px solid var(--paper); }
 
 /* ---------- Bottom sheet (log flow) ---------- */
 .scrim { position: absolute; inset: 0; background: var(--board); }
@@ -687,4 +689,5 @@ button.shot { border: 0; padding: 0; cursor: zoom-in; display: block; width: 100
 .crit-body .card-actions { margin-top: -4px; }
 
 .level-card { background: var(--fill); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.level-card .bar { flex-grow: 0; background: var(--paper); }
+.level-card .bar, .banner .bar { flex-grow: 1; background: var(--paper); }
+.level-card .bar { flex-grow: 0; }
