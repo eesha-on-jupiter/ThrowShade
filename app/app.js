@@ -603,9 +603,7 @@
       <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="grow"></div>`}
       </div>
       <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
-        ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
-          <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
-          : avatar(u, 'lg').replace('data-go', 'data-x')}
+        ${avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
         ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}
       </div>
@@ -1510,13 +1508,6 @@
         else if (!url) toast('Couldn’t read one of those images');
         if (--pending === 0) render();
       }));
-    }
-    if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
-      resizeImage(e.target.files[0], 300, url => {
-        if (!url) return toast('Couldn’t read that image');
-        me().photo = url;
-        save(); Sound.success(); render();
-      });
     }
   });
   root.addEventListener('keydown', e => {
