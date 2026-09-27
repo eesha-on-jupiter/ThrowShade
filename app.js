@@ -185,6 +185,24 @@
       .sort((x, y) => y.n - x.n || (avgFor(y.b.id).avg || 0) - (avgFor(x.b.id).avg || 0))
       .slice(0, limit || 10);
   }
+  // Radio: a Spotify-radio-style queue of places similar to one seed — same architect/style/kind/city/era win.
+  let radioSeedId = null, radioIdx = 0, radioMap = null;
+  function radioQueue(seedId) {
+    const seed = BY_ID[seedId];
+    if (!seed) return [];
+    const distMap = new Map(nearest(BUILDINGS).map(x => [x.b.id, x.d]));
+    return BUILDINGS.filter(b => b.id !== seedId).map(b => {
+      let score = 0;
+      if (b.architect && b.architect === seed.architect) score += 6;
+      if (b.style && b.style === seed.style) score += 5;
+      if (b.city && b.city === seed.city) score += 3;
+      if (kindOf(b) === kindOf(seed)) score += 2;
+      if (b.year && seed.year && Math.abs(b.year - seed.year) <= 15) score += 2;
+      const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
+      score += Math.max(0, 1 - d / 200);
+      return { b, score };
+    }).filter(x => x.score > 0).sort((x, y) => y.score - x.score).slice(0, 30).map(x => x.b);
+  }
   // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
   function recsFor(uid, limit) {
     const visited = new Set(visitsBy(uid).map(v => v.buildingId));
@@ -305,17 +323,6 @@
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
     return vs.length ? vs[0].photos[0] : null;
   }
-  // A photo from a log that actually tagged this feature; else a distinct shot of the place (the vetted
-  // Commons photos first, then its Wikipedia gallery — round-robin by row so rows don't repeat); else the hero.
-  function photoForAspect(b, aspect, i) {
-    const tagged = visitsFor(b.id).filter(v => v.likes && v.likes.includes(aspect) && v.photos && v.photos.length)
-      .sort((x, y) => (y.userId === state.me) - (x.userId === state.me) || y.createdAt - x.createdAt);
-    if (tagged.length) return tagged[0].photos[0];
-    const pool = (SEED_PHOTOS[b.id] || []).map(x => x.url);
-    if (pool.length) return pool[i % pool.length];
-    if (b.gallery && b.gallery.length) return b.gallery[i % b.gallery.length];
-    return photoURL(b, 120);
-  }
 
   // ---------- Formatting ----------
   function esc(s) {
@@ -382,6 +389,9 @@
     back: '<path d="m15 18-6-6 6-6"/>',
     chevron: '<path d="m9 18 6-6-6-6"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1-1"/>',
+    more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
     navigate: '<path d="m3 11 19-9-9 19-2-8z"/>',
@@ -399,7 +409,9 @@
     ticket: '<path d="M3 8.5a2 2 0 0 0 0 4V16a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3.5a2 2 0 0 1 0-4V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" transform="translate(0 2)"/><path d="M14 6v2M14 11v2M14 16v2"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
-    flame: '<path d="M12 2c2 3-2 4-2 7a3 3 0 0 0 6 0c1.5 2 2 4 2 6a6 6 0 1 1-12 0c0-4 3-5 3-9 0-1.5.5-3 3-4z"/>',
+    radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
+    sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
+    flame: '<path d="M12 22a6 6 0 0 0 6-6c0-3-2-4.5-3-7-0.5 1.5-1.5 2.5-2.5 2.5C13 9 13.5 6 11 2c0 4-4 6-5.5 9.5A6.8 6.8 0 0 0 5 14a7 7 0 0 0 7 8z"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -503,12 +515,13 @@
       success() { tone(660, 0.09, 'sine', 0.05); tone(880, 0.13, 'sine', 0.05, 0.09); },
     };
   })();
+  // Floating icon-only bar; names live in aria-label / title.
   function nav(active) {
-    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon(ic)}${label}</a>`;
+    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}" aria-label="${label}" title="${label}">${icon(ic)}</a>`;
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home', 'home')}
       ${item('lists', '#/lists', 'Lists', 'bookmark')}
-      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people">${icon('search')}</a>
+      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people" title="Search">${icon('search')}</a>
       ${item('map', '#/map', 'Map', 'map')}
       ${item('you', '#/me', 'You', 'user')}
     </nav>`;
@@ -531,7 +544,8 @@
   // ---------- UI state ----------
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
-  let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
+  let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
+  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -606,23 +620,44 @@
       const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
-      const typeLabel = KIND_LABEL[mapKind] + (mapStyle !== 'all' ? ` · ${mapStyle}` : '');
+      const rpill = (k, label) => `<button class="pill ${mapMinRating === k ? 'on' : ''}" data-act="mapminrating" data-k="${k}">${label}</button>`;
+      const items = mapBuildings();
+      const listBody = mapMode === 'list' ? `<div class="screen" style="position:static;flex:1;overflow-y:auto"><div class="stack-6 pad">
+          ${rankByRating(items.map(x => x.b)).length ? rankByRating(items.map(x => x.b)).map((b, i) => {
+            const a = avgFor(b.id);
+            return `<button class="row" data-go="#/b/${b.id}">
+              <span class="rank">${i + 1}</span>
+              ${ph(b, { style: 'width:44px;height:44px', go: false })}
+              <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(makerLine(b))}</div></div>
+              ${a.avg ? scoreHTML(a.avg.toFixed(1)) : '<span class="small muted">No logs</span>'}
+            </button>`;
+          }).join('') : `<div class="empty">Nothing matches these filters.</div>`}
+        </div></div>` : '';
+      const filtersActive = mapFilter !== 'all' || mapKind !== 'all' || mapStyle !== 'all' || mapMinRating > 0;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
-        <div class="pills">
-          <button class="pill ${mapKindOpen || mapStyle !== 'all' ? 'on' : ''}" data-act="mapkindtoggle">${mapStyle !== 'all' ? `<span class="dot" style="background:${STYLES[mapStyle]}"></span>` : ''}${typeLabel}${icon('chevron', 'sm')}</button>
-          <span class="pill-sep"></span>
-          ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
+        <div class="pad" style="padding-bottom:10px;display:flex;gap:8px;align-items:center">
+          <div class="input-wrap grow">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div>
+          <button class="btn-sq ${filtersActive ? 'on' : ''}" data-act="mapfilterstoggle" aria-label="Filters">${icon('sliders', 'sm')}</button>
         </div>
-        ${mapKindOpen ? `
+        <div class="seg" style="margin:0 20px 10px">
+          <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
+          <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
+        </div>
+        ${mapFiltersOpen ? `
         <div class="map-filters">
+          <div class="pills" style="padding:0 0 10px">${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}</div>
+          <div class="caps" style="margin-bottom:6px">Type</div>
           <div class="pills" style="padding:0 0 10px">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>
+          <div class="caps" style="margin-bottom:6px">Rating</div>
+          <div class="pills" style="padding:0 0 10px">${rpill(0, 'Any')}${rpill(3, '3★+')}${rpill(4, '4★+')}${rpill(4.5, '4.5★+')}</div>
           <div class="caps" style="margin-bottom:6px">Styles</div>
           <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<button class="legend-row${mapStyle === s ? ' on' : ''}" data-act="mapstyle" data-k="${s}"><span class="dot" style="background:${c}"></span> ${s}</button>`).join('')}
             <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
             <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
         </div>` : ''}
-        <div class="map-wrap" style="position:relative;flex:1">
+        ${listBody}
+        <div class="map-wrap" style="position:relative;flex:1;display:${mapMode === 'list' ? 'none' : 'block'}">
           <div id="map"></div>
           <button class="btn-sq map-heatbtn ${mapHeat ? 'on' : ''}" data-act="toggleheat" aria-label="Toggle heatmap">${icon('flame')}</button>
           <button class="btn-sq map-locate" data-act="locate" aria-label="Locate me">${icon('locate')}</button>
@@ -667,8 +702,43 @@
         <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
       </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1" style="display:flex;align-items:center;gap:8px">${icon('flame')}Trending</div></div>
       <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewRadio(seedId) {
+    const seed = BY_ID[seedId];
+    if (!seed) return viewNotFound();
+    if (radioSeedId !== seedId) { radioSeedId = seedId; radioIdx = 0; }
+    const queue = radioQueue(seedId);
+    if (!queue.length) {
+      return `<div class="screen with-nav">
+        <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Similar Places</div></div>
+        <div class="pad"><div class="empty">Not enough similar places to ${esc(seed.name)} yet.</div></div>
+      </div>${nav('')}`;
+    }
+    if (radioIdx >= queue.length) radioIdx = 0;
+    const b = queue[radioIdx];
+    const a = avgFor(b.id);
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">Similar to ${esc(seed.name)}</div></div>
+      <div class="pad stack">
+        ${ph(b, { w: 900, cls: 'hero', style: 'height:220px;border-radius:16px', label: phLabel(b) })}
+        <div><div class="h-building">${esc(b.name)}</div><div class="muted" style="margin-top:2px">${esc(makerLine(b))}</div></div>
+        <div class="row-flex" style="align-items:center;justify-content:space-between">
+          ${a.avg ? scoreHTML(a.avg.toFixed(1)) : `<span class="muted small">Not rated yet</span>`}
+          <span class="small muted">${radioIdx + 1} of ${queue.length}</span>
+        </div>
+        <div class="pin-map" id="radiomap" style="height:130px"></div>
+        <div class="small muted" style="margin-top:-6px">${fmtKm(km(seed, b))} from ${esc(seed.name)}</div>
+        <div class="row-flex">
+          <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
+          <button class="btn block" data-go="#/b/${b.id}">${icon('external', 'sm')}Open</button>
+        </div>
+        <button class="btn-primary" data-act="radioskip">Next similar place</button>
+      </div>
       <div class="spacer"></div>
     </div>${nav('')}`;
   }
@@ -770,7 +840,7 @@
     } else if (tab === 'guides') {
       const trend = trending(10);
       const trendShelf = trend.length ? `
-        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="section-title" style="margin-top:8px"><span style="display:inline-flex;align-items:center;gap:6px">${icon('flame', 'sm')} Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
           ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
           <div class="rail-name ellipsis">${esc(x.b.name)}</div>
@@ -947,7 +1017,6 @@
     vs.forEach(v => v.likes.forEach(l => { likeCounts[l] = (likeCounts[l] || 0) + 1; }));
     const liked = Object.entries(likeCounts).sort((x, y) => y[1] - x[1]);
     const want = isWant(state.me, b.id);
-    if (liked.length > 1 && !b.galleryDone && !b.gallery && b.wiki && !(SEED_PHOTOS[b.id] || []).length) fetchGallery(b);
     let tabBody;
     if (bTab === 'photos') {
       tabBody = photos.length
@@ -987,44 +1056,23 @@
     return `<div class="screen">
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
         <button class="btn-sq left" data-act="back" aria-label="Back">${icon('back')}</button>
-        <button class="btn-sq right" data-act="share" data-id="${b.id}" aria-label="Share">${icon('share')}</button>` })}
+        <div class="hero-ratings">
+          <span class="hero-rating" title="Community rating">${a.avg ? `${starSVG(INK, INK)}<b>${a.avg.toFixed(1)}</b><span class="muted">· ${a.n} log${a.n === 1 ? '' : 's'}</span>` : '<span class="muted">No ratings yet</span>'}</span>
+          ${mv ? `<span class="hero-rating mine" title="Your rating">You ${starSVG('#fff', '#fff')}<b>${mv.stars}</b></span>` : ''}
+        </div>` })}
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div>
           ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition and access">${factIcons(b)}</button>` : ''}</div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
-        <div class="row-flex" style="gap:12px">
-          <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
-          <div class="statbox"><div class="caps">Your rating</div>
-            ${mv ? `<div class="val" style="padding:6px 0 4px">${starsHTML(mv.stars, 'lg')}</div><div class="tiny muted">${STAR_WORDS[mv.stars]} · ${fmtDate(mv.visitedOn)}</div>`
-                 : `<div class="val">Not yet</div><div class="tiny muted">Log a visit to rate</div>`}
-          </div>
-        </div>
-        ${liked.length ? `<div>
-          <div class="section-title">Popular features<span class="muted small">${vs.length} log${vs.length === 1 ? '' : 's'}</span></div>
-          <div class="stack-6">${liked.slice(0, 6).map(([l, n], i) => {
-            const photo = photoForAspect(b, l, i);
-            const thumbBg = photo
-              ? `background-image:url('${photo}');background-size:cover;background-position:center;`
-              : hatch(styleColor(b));
-            return `<div style="display:flex;align-items:center;gap:10px">
-              <div class="ph" style="width:44px;height:44px;border-radius:10px;flex-shrink:0;${thumbBg}"></div>
-              <div class="grow">
-                <div class="small" style="margin-bottom:4px">${esc(l)}</div>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <div class="bar"><div style="width:${Math.round(n / vs.length * 100)}%"></div></div>
-                  <div class="tiny muted" style="flex-shrink:0">${n}</div>
-                </div>
-              </div>
-            </div>`;
-          }).join('')}</div>
-        </div>` : ''}
+        ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
         <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
         <div class="row-flex">
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
+        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('layers', 'sm')}Similar Places</button>
         <div class="about">
           <div class="bold">About</div>
           ${b.blurb ? `<div class="quote">${esc(b.blurb)}</div>` : b.enriching ? '<div class="muted small">Looking up Wikipedia…</div>' : ''}
@@ -1085,6 +1133,10 @@
         </div></div>` : '';
       })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
+          <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
+          ${icon('chevron', 'sm')}</button>` : ''}
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
         <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
@@ -1156,6 +1208,340 @@
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
+  }
+
+  // ---------- Wrapped ----------
+  // A story-style recap of one critic's logs: tap right/left to move, slides auto-advance.
+  const WRAP_MS = 6000;
+  let wrapUid = null, wrapIdx = 0, wrapTimer = null;
+
+  function wrapStars(n) { return '★'.repeat(n) + '<span style="opacity:.35">' + '★'.repeat(5 - n) + '</span>'; }
+  function wrapPersona(avg) {
+    if (avg >= 4.5) return ['The Superfan', 'Every building is a pilgrimage.'];
+    if (avg >= 3.8) return ['The Romantic', 'Generous, with a clear eye.'];
+    if (avg >= 3) return ['The Fair Judge', 'Honest ratings, no favourites.'];
+    return ['The Shade Thrower', 'Few buildings survive the gaze.'];
+  }
+
+  function wrapTally(list) {
+    const m = {};
+    list.filter(Boolean).forEach(x => { m[x] = (m[x] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }
+
+  function wrapSlides(u) {
+    const own = u.id === state.me;
+    const first = esc(u.name.split(' ')[0]);
+    const who = own ? 'You' : first;
+    const vs = visitsBy(u.id).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const bs = vs.map(v => BY_ID[v.buildingId]);
+    const tally = wrapTally;
+    const year = new Date().getFullYear();
+    const intro = {
+      bg: INK,
+      html: `<div class="w-kicker">throwShade Wrapped ${year}</div>
+        <div>${avatar(u, 'lg').replace('data-go', 'data-x')}</div>
+        <div class="w-big">${own ? 'Your' : first + '’s'} year in shade</div>
+        <div class="w-sub">Every building ${own ? 'you' : first} walked into, rated and remembered. Tap to begin.</div>`,
+    };
+    if (!vs.length) {
+      return [intro, {
+        bg: '#1d6f8c',
+        html: `<div class="w-big">Nothing logged yet</div><div class="w-sub">${own ? 'Log a building and your' : first + ' hasn’t logged anything, so their'} Wrapped fills itself in.</div>
+          ${own ? '<div class="w-btns"><button class="w-btn" data-go="#/log">Log a building</button></div>' : ''}`,
+      }];
+    }
+
+    const slides = [intro];
+    const cities = new Set(bs.map(b => b.city).filter(Boolean)).size;
+    const countries = new Set(bs.map(b => b.country).filter(Boolean)).size;
+    slides.push({
+      bg: '#1d6f8c',
+      html: `<div class="w-kicker">${who} logged</div>
+        <div class="w-huge" data-count="${vs.length}">0</div>
+        <div class="w-big">building${vs.length === 1 ? '' : 's'}</div>
+        <div class="w-sub">across ${cities} cit${cities === 1 ? 'y' : 'ies'}${countries > 1 ? ` in ${countries} countries` : ''}.</div>`,
+    });
+
+    const topV = vs[0], topB = bs[0];
+    slides.push({
+      bg: '#111',
+      photo: ph(topB, { w: 900, go: false, cls: 'wrap-photo' }),
+      bottom: true,
+      html: `<div class="w-kicker">${own ? 'Your' : first + '’s'} #1</div>
+        <div class="w-big">${esc(topB.name)}</div>
+        <div class="w-sub">${esc(makerLine(topB))}</div>
+        <div class="w-stars">${wrapStars(topV.stars)}</div>
+        ${topV.note ? `<div class="w-quote">“${esc(topV.note)}”</div>` : ''}`,
+    });
+
+    if (vs.length > 1) {
+      slides.push({
+        bg: '#2f6b4f',
+        html: `<div class="w-kicker">Top buildings</div>
+          <div class="w-list">${vs.slice(0, 5).map((v, i) => `<div class="w-row"><span class="n">${i + 1}</span>${ph(BY_ID[v.buildingId], { w: 120, go: false })}
+            <div class="grow"><b>${esc(BY_ID[v.buildingId].name)}</b><span class="s">${esc(BY_ID[v.buildingId].city || '')} · ${v.stars}★</span></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const styles = tally(bs.map(b => b.style));
+    if (styles.length) {
+      const [style, n] = styles[0];
+      slides.push({
+        bg: STYLES[style] || '#7c6a58',
+        html: `<div class="w-kicker">Top style</div>
+          <div class="w-big">${esc(style)}</div>
+          <div class="w-sub">${n} of ${vs.length} logs · ${Math.round(n / vs.length * 100)}%</div>
+          <div class="w-list">${styles.slice(0, 4).map(([s, c]) => `<div><div class="w-bar-label"><span>${esc(s)}</span><span>${c}</span></div><div class="w-bar"><div style="width:${Math.round(c / n * 100)}%"></div></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const architects = tally(bs.map(b => b.architect));
+    if (architects.length && architects[0][1] > 1) {
+      const [name, n] = architects[0];
+      const works = bs.filter(b => b.architect === name).slice(0, 3);
+      slides.push({
+        bg: '#8a4fa0',
+        html: `<div class="w-kicker">Most-logged architect</div>
+          <div class="w-big">${esc(name)}</div>
+          <div class="w-sub">${n} buildings. ${who} keep${own ? '' : 's'} coming back.</div>
+          <div class="w-thumbs">${works.map(b => ph(b, { w: 200, go: false })).join('')}</div>`,
+      });
+    }
+
+    const looks = tally(vs.flatMap(v => v.likes));
+    if (looks.length) {
+      slides.push({
+        bg: '#c2410c',
+        html: `<div class="w-kicker">${who} notice${own ? '' : 's'} the</div>
+          <div class="w-huge" style="font-size:72px">${esc(looks[0][0])}</div>
+          <div class="w-sub">Tagged ${looks[0][1]} time${looks[0][1] === 1 ? '' : 's'}. Also on the list:</div>
+          <div class="w-chips">${looks.slice(1, 7).map(([l, c]) => `<span class="w-chip">${esc(l)} ${c}</span>`).join('')}</div>`,
+      });
+    }
+
+    const dated = bs.filter(b => b.year).sort((a, b) => a.year - b.year);
+    if (dated.length > 1 && dated[dated.length - 1].year - dated[0].year >= 10) {
+      const old = dated[0], young = dated[dated.length - 1];
+      slides.push({
+        bg: '#a68a1d',
+        html: `<div class="w-kicker">Time travel</div>
+          <div class="w-huge" data-count="${young.year - old.year}">0</div>
+          <div class="w-big">years of architecture</div>
+          <div class="w-list">
+            <div class="w-row">${ph(old, { w: 120, go: false })}<div class="grow"><span class="s">Oldest · ${old.year}</span><b>${esc(old.name)}</b></div></div>
+            <div class="w-row">${ph(young, { w: 120, go: false })}<div class="grow"><span class="s">Newest · ${young.year}</span><b>${esc(young.name)}</b></div></div>
+          </div>`,
+      });
+    }
+
+    const low = vs[vs.length - 1];
+    if (vs.length > 1 && low.stars <= 3) {
+      const lb = BY_ID[low.buildingId];
+      slides.push({
+        bg: '#b3364a',
+        photo: ph(lb, { w: 900, go: false, cls: 'wrap-photo' }),
+        bottom: true,
+        html: `<div class="w-kicker">Most shade thrown at</div>
+          <div class="w-big">${esc(lb.name)}</div>
+          <div class="w-stars">${wrapStars(low.stars)}</div>
+          ${low.note ? `<div class="w-quote">“${esc(low.note)}”</div>` : `<div class="w-sub">${STAR_WORDS[low.stars]}.</div>`}`,
+      });
+    }
+
+    const avg = vs.reduce((s, v) => s + v.stars, 0) / vs.length;
+    const [persona, line] = wrapPersona(avg);
+    slides.push({
+      bg: '#1c1c1e',
+      html: `<div class="w-kicker">Average rating</div>
+        <div class="w-huge"><span data-count="${avg.toFixed(1)}" data-dec="1">0</span><span style="font-size:.5em">★</span></div>
+        <div class="w-kicker" style="margin-top:12px">Critic type</div>
+        <div class="w-big">${persona}</div>
+        <div class="w-sub">${line}</div>`,
+    });
+
+    slides.push({
+      bg: STYLES[styles[0][0]] || INK,
+      last: true,
+      html: `<div class="w-card">
+          <div style="display:flex;align-items:center;gap:12px">${avatar(u, 'md').replace('data-go', 'data-x')}<div class="grow"><b>${esc(u.name)}</b><div class="small muted">throwShade Wrapped ${year}</div></div></div>
+          <div class="w-card-grid">
+            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div class="ellipsis"><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
+            <div><div class="caps">Top style</div><div><b>${esc(styles[0][0])}</b></div>
+              <div class="caps" style="margin-top:8px">Architect</div><div class="ellipsis"><b>${esc(architects[0][0])}</b></div></div>
+            <div><div class="caps">Logged</div><div class="w-card-num">${vs.length}</div></div>
+            <div><div class="caps">Critic type</div><div><b>${persona}</b></div></div>
+          </div>
+        </div>
+        <div class="w-btns"><button class="w-btn ghost" data-act="wrapreplay">Replay</button><button class="w-btn" data-act="wrapshare" data-id="${u.id}">Share</button></div>`,
+    });
+    return slides;
+  }
+
+  // ----- Wrapped share sheet -----
+  let wrapShare = null; // { uid, blob, url }
+  const SHARE_BRANDS = {
+    instagram: ['Instagram', 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)',
+      '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg>'],
+    facebook: ['Facebook', '#1877F2',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.5 22v-8h2.7l.4-3.2h-3.1V8.8c0-.9.3-1.6 1.6-1.6h1.7V4.4c-.3 0-1.3-.1-2.5-.1-2.5 0-4.1 1.5-4.1 4.2v2.3H7.5V14h2.7v8z"/></svg>'],
+    x: ['X', '#000',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M17.8 3h3.1l-6.8 7.8 8 10.2h-6.3l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.9 3h6.4l4.4 5.9zm-1.1 16.2h1.7L7.4 4.7H5.6z"/></svg>'],
+    threads: ['Threads', '#000',
+      '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M16.5 11.2c-.6-2.6-2.4-3.7-4.6-3.7-2.9 0-4.4 2-4.4 4.5 0 2.7 1.7 4.5 4.6 4.5 2.4 0 4.2-1.3 4.2-3.3 0-1.8-1.4-2.7-3.2-2.7-1.6 0-2.8.8-2.8 2 0 1 .9 1.7 2.1 1.7 2.8 0 3.4-2.9 3.2-5.6"/><path d="M19.5 7.5C18.2 4.5 15.5 3 12 3 6.8 3 4 6.8 4 12s2.8 9 8 9c4 0 6.6-2 7.6-5"/></svg>'],
+    whatsapp: ['WhatsApp', '#25D366',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2.5a9.4 9.4 0 0 0-8.1 14.2L2.6 21.4l4.8-1.3A9.4 9.4 0 1 0 12 2.5zm5.4 13.3c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.5-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.9s.7-2.1 1-2.4c.3-.3.6-.3.8-.3h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.6-.1l2 .9c.3.1.5.2.5.3.1.1.1.6-.1 1.2z"/></svg>'],
+    line: ['LINE', '#06C755',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.6 1.1-.5 6-3.5 8.2-6.1 1.2-1.3 1.8-2.8 1.8-4.8C22 6.6 17.5 3 12 3zM8.3 13.5H6.3a.5.5 0 0 1-.5-.5V9a.5.5 0 0 1 1 0v3.5h1.5a.5.5 0 0 1 0 1zm2 -.5a.5.5 0 0 1-1 0V9a.5.5 0 0 1 1 0zm4.8 0a.5.5 0 0 1-.9.3L12 10.5V13a.5.5 0 0 1-1 0V9a.5.5 0 0 1 .9-.3l2.2 2.8V9a.5.5 0 0 1 1 0zm3.2-2.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5V9c0-.3.2-.5.5-.5h2a.5.5 0 0 1 0 1h-1.5v1z"/></svg>'],
+  };
+
+  function wrapSummary(uid) {
+    const u = user(uid);
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const bs = vs.map(v => BY_ID[v.buildingId]);
+    const avg = vs.length ? vs.reduce((t, v) => t + v.stars, 0) / vs.length : 0;
+    const style = (wrapTally(bs.map(b => b.style))[0] || [''])[0];
+    return {
+      u, vs, bs, avg, style,
+      architect: (wrapTally(bs.map(b => b.architect))[0] || [''])[0],
+      persona: wrapPersona(avg)[0],
+      color: STYLES[style] || INK,
+      link: location.href.split('#')[0] + '#/wrapped/' + uid,
+      text: `${u.name}’s throwShade Wrapped: ${vs.length} buildings logged${bs[0] ? ', #1 is ' + bs[0].name : ''}.`,
+    };
+  }
+
+  // Story-sized (1080×1920) PNG of the summary card, drawn on a canvas so it can be saved or posted.
+  async function wrapImage(uid) {
+    const w = wrapSummary(uid);
+    const W = 1080, H = 1920, F = '"IBM Plex Sans", system-ui, sans-serif';
+    try { await Promise.all([document.fonts.load('700 40px "IBM Plex Sans"'), document.fonts.load('400 40px "IBM Plex Sans"')]); } catch (e) {}
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const fit = (t, max) => {
+      if (x.measureText(t).width <= max) return t;
+      while (t.length > 1 && x.measureText(t + '…').width > max) t = t.slice(0, -1);
+      return t + '…';
+    };
+    const round = (l, t, rw, rh, r) => { x.beginPath(); x.roundRect(l, t, rw, rh, r); };
+
+    x.fillStyle = w.color; x.fillRect(0, 0, W, H);
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.textAlign = 'center';
+    x.font = `700 38px ${F}`; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+
+    // Avatar
+    x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
+    if (w.u.photo) {
+      const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; });
+      if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
+    } else {
+      x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic';
+    }
+    x.restore();
+    x.fillStyle = '#fff'; x.font = `700 76px ${F}`; x.fillText(fit(w.u.name, 900), W / 2, 650);
+    x.fillStyle = 'rgba(255,255,255,.8)'; x.font = `400 40px ${F}`; x.fillText('@' + w.u.handle, W / 2, 712);
+
+    // Card
+    const L = 110, CW = W - 2 * L, T = 790, CH = 880;
+    x.fillStyle = '#fff'; round(L, T, CW, CH, 48); x.fill();
+    x.textAlign = 'left';
+    const caps = (t, l, top) => { x.fillStyle = '#a1a1a6'; x.font = `700 28px ${F}`; x.fillText(t.toUpperCase(), l, top); };
+    caps('Top buildings', L + 60, T + 90);
+    w.bs.slice(0, 5).forEach((b, i) => {
+      const y = T + 160 + i * 66;
+      x.fillStyle = INK; x.font = `700 44px ${F}`; x.fillText(String(i + 1), L + 60, y);
+      x.font = `400 42px ${F}`; x.fillText(fit(b.name, CW - 180), L + 120, y);
+    });
+    const gy = T + 540, col2 = L + CW / 2 + 10;
+    x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2);
+    caps('Logged', L + 60, gy);
+    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(String(w.vs.length), L + 60, gy + 100);
+    caps('Average', col2, gy);
+    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
+    caps('Top style', L + 60, gy + 190);
+    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.style, CW / 2 - 90), L + 60, gy + 245);
+    caps('Critic type', col2, gy + 190);
+    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.persona, CW / 2 - 70), col2, gy + 245);
+
+    x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = `700 56px ${F}`; x.fillText('throwShade', W / 2, 1800);
+    return new Promise(res => c.toBlob(res, 'image/png'));
+  }
+
+  async function openWrapShare(uid) {
+    const host = root.querySelector('.wrap');
+    if (!host || host.querySelector('.wrap-sheet')) return;
+    const bg = document.createElement('div');
+    bg.className = 'wrap-sheet-bg'; bg.dataset.act = 'shareclose';
+    const sheet = document.createElement('div');
+    sheet.className = 'wrap-sheet';
+    const opt = (act, label, face, style) => `<button class="share-opt" data-act="${act}"><span class="ic" style="${style || ''}">${face}</span>${label}</button>`;
+    sheet.innerHTML = `<div class="grab"></div>
+      <div class="wrap-sheet-preview"><div class="spin"></div></div>
+      <div class="share-row">
+        ${opt('sharedl', 'Download', icon('download'))}
+        ${opt('sharecopy', 'Copy link', icon('link'))}
+        ${Object.entries(SHARE_BRANDS).map(([k, [label, bgc, svg]]) => opt('shareto', label, svg, `background:${bgc}`).replace('data-act="shareto"', `data-act="shareto" data-to="${k}"`)).join('')}
+        ${opt('sharemore', 'More', icon('more'))}
+      </div>`;
+    host.append(bg, sheet);
+    if (wrapShare && wrapShare.uid !== uid) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
+    if (!wrapShare) {
+      const blob = await wrapImage(uid);
+      wrapShare = { uid, blob, url: URL.createObjectURL(blob) };
+    }
+    const pv = sheet.querySelector('.wrap-sheet-preview');
+    if (pv) pv.innerHTML = `<img src="${wrapShare.url}" alt="Wrapped share image">`;
+  }
+  function closeWrapShare() {
+    const host = root.querySelector('.wrap');
+    if (!host) return;
+    host.querySelectorAll('.wrap-sheet, .wrap-sheet-bg').forEach(el => el.remove());
+  }
+  function wrapDownload() {
+    if (!wrapShare) return false;
+    const a = document.createElement('a');
+    a.href = wrapShare.url; a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    return true;
+  }
+  function wrapFile() {
+    return wrapShare ? new File([wrapShare.blob], `throwshade-wrapped-${user(wrapShare.uid).handle}.png`, { type: 'image/png' }) : null;
+  }
+
+  function viewWrapped(uid) {
+    const u = user(uid);
+    if (!u) return viewNotFound();
+    if (wrapUid !== uid) { wrapUid = uid; wrapIdx = 0; }
+    const slides = wrapSlides(u);
+    wrapIdx = Math.max(0, Math.min(wrapIdx, slides.length - 1));
+    const s = slides[wrapIdx];
+    const last = wrapIdx === slides.length - 1;
+    const bars = slides.map((_, i) => `<div><span class="${i < wrapIdx || (i === wrapIdx && last) ? 'done' : i === wrapIdx ? 'run' : ''}"></span></div>`).join('');
+    return `<div class="screen fixed wrap" style="background:${s.bg}">
+      ${s.photo || ''}
+      <div class="wrap-bars">${bars}</div>
+      <button class="btn-sq wrap-close" data-act="wrapclose" aria-label="Close">${icon('x')}</button>
+      <button class="wrap-tap prev" data-act="wrapprev" aria-label="Previous"></button>
+      ${last ? '' : '<button class="wrap-tap next" data-act="wrapnext" aria-label="Next"></button>'}
+      <div class="wrap-body ${s.bottom ? 'bottom' : ''}" data-n="${slides.length}">${s.html}</div>
+    </div>`;
+  }
+
+  function startWrap() {
+    clearTimeout(wrapTimer);
+    const body = root.querySelector('.wrap-body');
+    if (!body) return;
+    root.querySelectorAll('[data-count]').forEach(el => {
+      const to = +el.dataset.count, dec = +(el.dataset.dec || 0), t0 = Date.now();
+      const tick = setInterval(() => {
+        const k = Math.min(1, (Date.now() - t0) / 1000);
+        el.textContent = (to * (1 - Math.pow(1 - k, 3))).toFixed(dec);
+        if (k >= 1 || !el.isConnected) clearInterval(tick);
+      }, 30);
+    });
+    if (wrapIdx < +body.dataset.n - 1) wrapTimer = setTimeout(() => { if (currentPath().startsWith('/wrapped')) actions.wrapnext(); }, WRAP_MS);
+    else if (body.querySelector('.w-card')) { Sound.success(); celebrate(); }
   }
 
   function viewEditProfile() {
@@ -1254,6 +1640,8 @@
     if (map) { map.remove(); map = null; mapMarkers = {}; heatLayer = null; }
     if (pinMap) { pinMap.remove(); pinMap = null; }
     if (beenMap) { beenMap.remove(); beenMap = null; }
+    if (radioMap) { radioMap.remove(); radioMap = null; }
+    clusterGroup = null; heatLayer = null;
     pinMode = false;
   }
   function setPinMode(on) {
@@ -1261,7 +1649,7 @@
     const btn = document.getElementById('pinbtn'), hint = document.getElementById('map-hint');
     if (btn) btn.classList.toggle('on', on);
     if (hint) hint.hidden = !on;
-    if (on && mapKindOpen) { mapKindOpen = false; render(); }
+    if (on && mapFiltersOpen) { mapFiltersOpen = false; render(); }
   }
   function placePin(latlng) {
     setPinMode(false);
@@ -1280,6 +1668,8 @@
     if (mapFilter === 'friends') list = list.filter(b => friends.has(b.id));
     if (mapKind !== 'all') list = list.filter(b => kindOf(b) === mapKind);
     if (mapStyle !== 'all') list = list.filter(b => b.style === mapStyle);
+    if (mapMinRating > 0) list = list.filter(b => (avgFor(b.id).avg || 0) >= mapMinRating);
+    if (mapQ.trim()) { const q = mapQ.trim().toLowerCase(); list = list.filter(b => [b.name, b.city, b.architect].filter(Boolean).join(' ').toLowerCase().includes(q)); }
     return list.map(b => ({ b, kind: mapFilter === 'friends' && kind(b) === 'other' ? 'been' : kind(b) }));
   }
   function pinIcon(b, kind) {
@@ -1311,19 +1701,19 @@
     window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
-    // Zoomed out, pins overlap too much to tell apart — the first tap zooms in on that spot
-    // instead of opening the card, so it reads as "zoom into this cluster" not "pick this pin".
-    const ZOOM_SELECT = 15;
+    clusterGroup = window.L.markerClusterGroup ? window.L.markerClusterGroup({ maxClusterRadius: 46, spiderfyOnMaxZoom: true, showCoverageOnHover: false }) : null;
+    const target = clusterGroup || map;
     items.forEach(({ b, kind }) => {
-      const m = window.L.marker([b.lat, b.lng], { icon: pinIcon(b, kind) }).addTo(map);
+      const m = window.L.marker([b.lat, b.lng], { icon: pinIcon(b, kind) });
       m.on('click', () => {
-        if (map.getZoom() < ZOOM_SELECT) { map.flyTo([b.lat, b.lng], ZOOM_SELECT, { duration: .5 }); return; }
         const prev = mapSel; mapSel = b.id;
         [prev, b.id].forEach(id => { const r = mapMarkers[id]; if (r) r.marker.setIcon(pinIcon(r.b, r.kind)); });
         renderMapCard();
       });
       mapMarkers[b.id] = { marker: m, b, kind };
+      target.addLayer(m);
     });
+    if (clusterGroup) map.addLayer(clusterGroup);
     if (mapHeat && window.L.heatLayer) {
       const fids = followingIds(state.me);
       // Snapchat-style glow: everyone's logs light up a spot, friends' logs light it up brighter.
@@ -1675,6 +2065,20 @@
          <button class="btn-primary" data-act="savenamed">Add and rate it</button>
        </div>`);
   }
+  function initRadioMap() {
+    const seed = BY_ID[radioSeedId];
+    const queue = radioQueue(radioSeedId);
+    const b = queue[radioIdx];
+    if (!window.L || !seed || !b || !document.getElementById('radiomap')) return;
+    radioMap = window.L.map('radiomap', { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+      touchZoom: false, boxZoom: false, keyboard: false, attributionControl: false });
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(radioMap);
+    window.L.marker([seed.lat, seed.lng], { icon: window.L.divIcon({ className: '', html: '<div class="pin me"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(radioMap);
+    window.L.marker([b.lat, b.lng], { icon: window.L.divIcon({ className: '', html: '<div class="drop"></div>', iconSize: [22, 30], iconAnchor: [11, 30] }), interactive: false }).addTo(radioMap);
+    radioMap.fitBounds([[seed.lat, seed.lng], [b.lat, b.lng]], { padding: [28, 28], maxZoom: 15 });
+    setTimeout(() => radioMap && radioMap.invalidateSize(), 0);
+  }
+
   function initPin(lat, lng) {
     const key = pinKey(lat, lng);
     if (!lookups[key] || (lookups[key].status === 'done' && lookups[key].error)) lookupPin(key, lat, lng);
@@ -1737,27 +2141,6 @@
     if (currentPath() === '/b/' + b.id) render();
   }
 
-  // Pull the other photos already sitting on a building's Wikipedia article, so "Popular features"
-  // doesn't have to repeat the single hero image for every row.
-  const BAD_IMG = /logo|icon|flag|symbol|locator|_map(_|\.)|\.svg$|\.ogv?$|\.pdf$|\.gif$/i;
-  async function fetchGallery(b) {
-    b.galleryDone = true;
-    try {
-      const title = decodeURIComponent((b.wiki.split('/wiki/')[1] || '').replace(/_/g, ' '));
-      if (!title) return;
-      const d = await fetchJSON('https://en.wikipedia.org/w/api.php?' + qs({
-        action: 'query', format: 'json', origin: '*', generator: 'images', gimlimit: 20,
-        prop: 'imageinfo', iiprop: 'url|size', iiurlwidth: 300, titles: title,
-      }));
-      const pages = Object.values((d.query && d.query.pages) || {});
-      const gallery = pages
-        .filter(p => p.imageinfo && p.imageinfo[0] && !BAD_IMG.test(p.title) && (p.imageinfo[0].width || 0) >= 300)
-        .map(p => p.imageinfo[0].thumburl || p.imageinfo[0].url)
-        .filter(Boolean)
-        .slice(0, 8);
-      if (gallery.length) { b.gallery = gallery; if (currentPath() === '/b/' + b.id) render(); }
-    } catch (e) { /* offline or rate-limited: features fall back to the hero photo */ }
-  }
 
   // ---------- Photo resize ----------
   function resizeImage(file, maxSide, cb) {
@@ -1887,6 +2270,11 @@
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
     if (seg[0] !== 'log') { draft = null; delArmed = false; }
     if (seg[0] !== 'save' && seg[0] !== 'newlist') inviteSel = new Set();
+    clearTimeout(wrapTimer);
+    if (seg[0] !== 'wrapped') {
+      wrapUid = null;
+      if (wrapShare) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
+    }
 
     destroyMap();
     galleries = [];
@@ -1894,7 +2282,7 @@
     switch (seg[0]) {
       case 'signin': html = viewSignin(); break;
       case 'feed': html = viewHome('feed'); break;
-      case 'map': html = viewHome('map'); after = initMap; break;
+      case 'map': html = viewHome('map'); if (mapMode !== 'list') after = initMap; break;
       case 'find': html = viewFind(); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
       case 'list': html = seg[1] === 'want' ? viewWantList() : seg[1] === 'been' ? viewBeenList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
@@ -1902,12 +2290,14 @@
       case 'newlist': html = viewNewList(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
+      case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
       case 'followers': html = viewFollowList(seg[1], 'followers'); break;
       case 'following': html = viewFollowList(seg[1], 'following'); break;
       case 'editprofile': html = viewEditProfile(); break;
+      case 'wrapped': html = viewWrapped(seg[1] || state.me); after = startWrap; break;
       case 'log': html = seg[1] ? viewLogRate(seg[1]) : viewLogPick(); break;
       case 'pin': {
         const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(seg[1] || '');
@@ -2021,26 +2411,22 @@
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
     },
+    radioskip() { radioIdx++; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
-    mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
-    mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
-    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapKindOpen = false; mapSel = null; render(); },
+    mapkind(d) { mapKind = d.k; mapFiltersOpen = false; mapSel = null; render(); },
+    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapFiltersOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
+    mapmode(d) { mapMode = d.k; render(); },
+    mapfilterstoggle() { mapFiltersOpen = !mapFiltersOpen; render(); },
+    mapminrating(d) { mapMinRating = +d.k; mapFiltersOpen = false; mapSel = null; render(); },
     locate() {
       requestLocation(ok => {
         if (!ok) toast('Location unavailable — using ' + loc.label);
         if (map) map.setView([loc.lat, loc.lng], 14);
       });
-    },
-    share(d) {
-      const b = BY_ID[d.id], mv = myVisit(d.id);
-      const text = mv ? `I gave ${b.name} ${mv.stars}★ on throwShade` : `${b.name} by ${b.architect} — on throwShade`;
-      if (navigator.share) navigator.share({ title: b.name, text }).catch(() => {});
-      else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'), () => toast(text));
-      else toast(text);
     },
     closelog() { draft = null; back(); },
     tofacts() { const el = document.getElementById('facts'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
@@ -2050,6 +2436,45 @@
     lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
     lbprev() { stepViewer(-1); },
     lbnext() { stepViewer(1); },
+    wrapnext() { wrapIdx++; Sound.tap(); render(); },
+    wrapprev() { wrapIdx = Math.max(0, wrapIdx - 1); render(); },
+    wrapreplay() { wrapIdx = 0; render(); },
+    wrapclose() { back(); },
+    wrapshare(d) { openWrapShare(d.id); },
+    shareclose() { closeWrapShare(); },
+    sharedl() { if (wrapDownload()) toast('Image saved'); },
+    sharecopy() {
+      const w = wrapSummary(wrapUid);
+      const text = w.text + ' ' + w.link;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Link copied'), () => toast(text));
+      else toast(text);
+    },
+    shareto(d) {
+      const w = wrapSummary(wrapUid);
+      const u = encodeURIComponent(w.link), t = encodeURIComponent(w.text);
+      if (d.to === 'instagram') {
+        // No web intent for Instagram: hand the image to the phone's share sheet, else save it for posting.
+        const file = wrapFile();
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file] }).catch(() => {});
+        else if (wrapDownload()) toast('Image saved — post it to your Instagram story');
+        return;
+      }
+      const urls = {
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+        x: `https://twitter.com/intent/tweet?text=${t}&url=${u}`,
+        threads: `https://www.threads.net/intent/post?text=${t}%20${u}`,
+        whatsapp: `https://wa.me/?text=${t}%20${u}`,
+        line: `https://social-plugins.line.me/lineit/share?url=${u}&text=${t}`,
+      };
+      if (urls[d.to]) window.open(urls[d.to], '_blank', 'noopener');
+    },
+    sharemore() {
+      const w = wrapSummary(wrapUid), file = wrapFile();
+      const data = { title: 'throwShade Wrapped', text: w.text, url: w.link };
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) data.files = [file];
+      if (navigator.share) navigator.share(data).catch(() => {});
+      else actions.sharecopy();
+    },
     closeedit() { pickedPhoto = undefined; back(); },
     // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
     shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
@@ -2183,6 +2608,15 @@
 
   const inputs = {
     find(el) { findQ = el.value; document.getElementById('results').innerHTML = findResults(); },
+    mapq(el) {
+      mapQ = el.value; clearTimeout(mapQTimer);
+      // The map re-renders with the filtered pins; put the cursor back where it was.
+      mapQTimer = setTimeout(() => {
+        render();
+        const q = document.querySelector('[data-input=mapq]');
+        if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+      }, 300);
+    },
     logq(el) { document.getElementById('logresults').innerHTML = logResults(el.value); },
     note(el) { draft.note = el.value; document.getElementById('note-count').textContent = el.value.length + ' / 280'; },
     date(el) { draft.date = el.value || isoDate(Date.now()); },
