@@ -1231,6 +1231,7 @@
           <div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div>
         </div></div>` : '';
       })()}
+      ${own ? '' : `<div class="pad" style="margin-top:10px"><button class="btn dashed" style="width:100%;height:48px" data-go="#/compare/${uid}">${icon('layers', 'sm')}Head-to-Head</button></div>`}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
         ${(() => {
           const badges = badgesFor(uid);
@@ -1303,6 +1304,55 @@
     else beenMap.fitBounds(list.map(g => [g.lat, g.lng]), { padding: [36, 36], maxZoom: 10 });
     draw();
     setTimeout(() => beenMap && beenMap.invalidateSize(), 0);
+  }
+
+  function compareStats(a, b) {
+    const of = uid => visitsBy(uid).filter(v => BY_ID[v.buildingId]);
+    const va = of(a), vb = of(b);
+    const citiesOf = vs => new Set(vs.map(v => BY_ID[v.buildingId].city).filter(Boolean)).size;
+    const avgOf = vs => vs.length ? vs.reduce((s, v) => s + v.stars, 0) / vs.length : 0;
+    const topStyleOf = vs => {
+      const m = {}; vs.forEach(v => { const s = BY_ID[v.buildingId].style; if (s) m[s] = (m[s] || 0) + 1; });
+      const e = Object.entries(m).sort((x, y) => y[1] - x[1])[0]; return e ? e[0] : '—';
+    };
+    return {
+      logged: [va.length, vb.length], cities: [citiesOf(va), citiesOf(vb)],
+      avg: [avgOf(va), avgOf(vb)], style: [topStyleOf(va), topStyleOf(vb)],
+      followers: [followerCount(a), followerCount(b)],
+    };
+  }
+  function viewCompare(uid) {
+    const other = user(uid);
+    if (!other || uid === state.me) return viewNotFound();
+    const me = user(state.me);
+    const s = compareStats(state.me, uid);
+    const c = compatibility(state.me, uid);
+    const statRow = (label, [a, b], fmt) => {
+      fmt = fmt || (x => x);
+      const aWin = a > b, bWin = b > a;
+      return `<div class="row-flex" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+        <b style="width:70px;text-align:left;${aWin ? '' : 'color:var(--text-3);font-weight:400'}">${fmt(a)}</b>
+        <span class="small muted" style="flex:1;text-align:center">${esc(label)}</span>
+        <b style="width:70px;text-align:right;${bWin ? '' : 'color:var(--text-3);font-weight:400'}">${fmt(b)}</b>
+      </div>`;
+    };
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Head-to-Head</div></div>
+      <div class="pad" style="display:flex;align-items:center;justify-content:space-between">
+        <div style="text-align:center;width:33%">${avatar(me, 'md').replace('data-go', 'data-x')}<div class="small" style="margin-top:6px"><b>You</b></div></div>
+        <div class="h1">VS</div>
+        <div style="text-align:center;width:33%">${avatar(other, 'md').replace('data-go', 'data-x')}<div class="small" style="margin-top:6px"><b class="ellipsis">${esc(other.name.split(' ')[0])}</b></div></div>
+      </div>
+      ${c ? `<div class="pad"><div class="banner" style="text-align:center"><b style="font-size:22px">${c.pct}%</b><div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div></div></div>` : ''}
+      <div class="pad stack-6" style="margin-top:6px">
+        ${statRow('Places logged', s.logged)}
+        ${statRow('Cities', s.cities)}
+        ${statRow('Avg rating', s.avg, x => x ? x.toFixed(1) + '★' : '—')}
+        ${statRow('Top style', s.style)}
+        ${statRow('Followers', s.followers)}
+      </div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function viewLeaderboard() {
@@ -2422,6 +2472,7 @@
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
       case 'leaderboard': html = viewLeaderboard(); break;
+      case 'compare': html = viewCompare(seg[1]); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
