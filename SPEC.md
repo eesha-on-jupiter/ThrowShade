@@ -74,7 +74,7 @@ Other routes: `#/find` (search places and people), `#/b/<id>` (place), `#/u/<id>
 | Lists | Want to Visit (private) plus custom lists, each with a thumbnail, place count and member avatars; "+" to create a list |
 | Save sheet | "Save" on any feed post or place opens it: tick Want to Visit or any of your lists, or create a new list and invite people inline |
 | List | Places with who added them; members row; invite sheet (members can view and add places) |
-| Profile | Avatar (tap to change photo), edit profile, stats (Logged, Cities, Followers, Following → lists), a "Where you've been" map with a numbered blob per city that merges when zoomed out, and critiques |
+| Profile | Avatar (tap to change photo), edit profile, stats (Logged, Cities, Followers, Following → lists), a "Where you've been" map styled like the Map tab (style-coloured pins that cluster when zoomed out, tap a pin for a card with that person's rating, flame heatmap toggle), and critiques |
 
 ## 7. Data
 
