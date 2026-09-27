@@ -300,6 +300,61 @@
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
   }
+  // Achievements: computed fresh from existing data, nothing new to store.
+  function badgesFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]);
+    const cities = new Set(vs.map(v => BY_ID[v.buildingId].city).filter(Boolean)).size;
+    const countries = new Set(vs.map(v => BY_ID[v.buildingId].country).filter(Boolean)).size;
+    const photoLogs = vs.filter(v => v.photos && v.photos.length).length;
+    const noteLogs = vs.filter(v => v.note && v.note.trim()).length;
+    const lowRatings = vs.filter(v => v.stars <= 2).length;
+    const avg = vs.length ? vs.reduce((s, v) => s + v.stars, 0) / vs.length : 0;
+    const added = state.places.filter(p => p.addedBy === uid).length;
+    const starIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path d="${STAR_PATH}" fill="currentColor"/></svg>`;
+    return [
+      { id: 'first', label: 'First Log', icon: icon('check'), desc: 'Log your first place.', earned: vs.length >= 1 },
+      { id: 'regular', label: 'Regular Critic', icon: icon('edit'), desc: 'Log 10 places.', earned: vs.length >= 10 },
+      { id: 'veteran', label: 'Veteran Critic', icon: icon('layers'), desc: 'Log 25 places.', earned: vs.length >= 25 },
+      { id: 'jetsetter', label: 'Jetsetter', icon: icon('navigate'), desc: 'Log places in 5 different cities.', earned: cities >= 5 },
+      { id: 'globe', label: 'World Traveler', icon: icon('pin'), desc: 'Log places in 3 different countries.', earned: countries >= 3 },
+      { id: 'photog', label: 'Photographer', icon: icon('camera'), desc: 'Add photos to 5 logs.', earned: photoLogs >= 5 },
+      { id: 'wordsmith', label: 'Wordsmith', icon: icon('feed'), desc: 'Write notes on 10 logs.', earned: noteLogs >= 10 },
+      { id: 'shade', label: 'Shade Thrower', icon: icon('x'), desc: 'Rate 5 places 2★ or below.', earned: lowRatings >= 5 },
+      { id: 'superfan', label: 'Superfan', icon: starIcon, desc: 'Average 4.5★+ across 5 logs.', earned: vs.length >= 5 && avg >= 4.5 },
+      { id: 'butterfly', label: 'Social Butterfly', icon: icon('users'), desc: 'Follow 10 people.', earned: followingIds(uid).size >= 10 },
+      { id: 'influencer', label: 'Influencer', icon: icon('user'), desc: 'Get 15 followers.', earned: followerCount(uid) >= 15 },
+      { id: 'trailblazer', label: 'Trailblazer', icon: icon('building'), desc: 'Add a place to the map yourself.', earned: added >= 1 },
+    ];
+  }
+  // Consecutive weeks (Mon–Sun) with at least one log, counting back from this week.
+  function streakWeeks(uid) {
+    const vs = visitsBy(uid);
+    if (!vs.length) return 0;
+    const weekStart = ts => { const d = new Date(ts); const day = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day); return d.getTime(); };
+    const weeks = new Set(vs.map(v => weekStart(v.createdAt)));
+    let streak = 0, cursor = weekStart(Date.now());
+    while (weeks.has(cursor)) { streak++; cursor -= 7 * DAY; }
+    return streak;
+  }
+  // Level/title: rough XP from logs + earned badges, mapped to a title band.
+  const LEVELS = [[0, 'Newcomer'], [50, 'Regular'], [120, 'Architecture Buff'], [250, 'Critic'], [450, 'Senior Critic'], [700, 'Master Critic'], [1000, 'Legend']];
+  function levelFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]).length;
+    const badges = badgesFor(uid).filter(x => x.earned).length;
+    const xp = vs * 10 + badges * 15;
+    let title = LEVELS[0][1], next = LEVELS[1];
+    for (let i = 0; i < LEVELS.length; i++) { if (xp >= LEVELS[i][0]) { title = LEVELS[i][1]; next = LEVELS[i + 1] || null; } }
+    return { xp, title, next, floor: LEVELS.find(l => l[1] === title)[0] };
+  }
+  // Monthly leaderboard among the people you follow, plus yourself.
+  function monthlyLeaderboard() {
+    const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+    const since = start.getTime();
+    const fids = followingIds(state.me); fids.add(state.me);
+    const counts = {};
+    state.visits.forEach(v => { if (fids.has(v.userId) && v.createdAt >= since) counts[v.userId] = (counts[v.userId] || 0) + 1; });
+    return Array.from(fids).map(uid => ({ u: user(uid), n: counts[uid] || 0 })).filter(x => x.u).sort((a, b) => b.n - a.n);
+  }
   function guideBuildings(dim, key) {
     if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
     if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
@@ -672,8 +727,17 @@
         ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
       </button>`;
     }).join('') : `<div class="empty">Nothing here yet.</div>`;
+    const completion = dim === 'city' ? (() => {
+      const seen = new Set(visitsBy(state.me).map(v => v.buildingId));
+      const done = list.filter(b => seen.has(b.id)).length;
+      return list.length ? `<div class="pad"><div class="banner" style="display:flex;flex-direction:column;gap:8px">
+        <div class="row-flex" style="justify-content:space-between"><b>You've seen ${done} of ${list.length}</b><span class="small muted">${Math.round(done / list.length * 100)}%</span></div>
+        <div class="bar"><div style="width:${Math.round(done / list.length * 100)}%"></div></div>
+      </div></div>` : '';
+    })() : '';
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">${esc(title)}</div></div>
+      ${completion}
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -1112,6 +1176,14 @@
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
         ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
       </div>
+      <div class="pad" style="padding-top:0;padding-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${(() => {
+          const lvl = levelFor(uid);
+          const pct = lvl.next ? Math.round((lvl.xp - lvl.floor) / (lvl.next[0] - lvl.floor) * 100) : 100;
+          return `<span class="chip">${esc(lvl.title)}</span><div class="bar" style="flex:1;min-width:60px"><div style="width:${pct}%"></div></div><span class="tiny muted">${lvl.next ? `${lvl.next[0] - lvl.xp} XP to ${esc(lvl.next[1])}` : 'Max level'}</span>`;
+        })()}
+        ${streakWeeks(uid) >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streakWeeks(uid)}-week streak</span>` : ''}
+      </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
@@ -1129,10 +1201,25 @@
         </div></div>` : '';
       })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        ${(() => {
+          const badges = badgesFor(uid);
+          const earned = badges.filter(x => x.earned).length;
+          return `<div><div class="section-title">Badges<span class="small muted" style="font-weight:400">${earned} of ${badges.length}</span></div>
+            <div class="badge-grid">${badges.map(x => `<div class="badge-tile ${x.earned ? 'on' : 'locked'}" title="${esc(x.desc)}">
+              <div class="badge-icon">${x.icon}</div>
+              <div class="badge-label">${esc(x.label)}</div>
+            </div>`).join('')}</div>
+          </div>`;
+        })()}
         ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
           <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
           ${icon('chevron', 'sm')}</button>` : ''}
+        ${own ? `<button class="row" data-go="#/leaderboard">
+          <div class="list-icon">${icon('users')}</div>
+          <div class="grow"><b>Friend Leaderboard</b><div class="sub">Who's logged the most this month</div></div>
+          ${icon('chevron', 'sm')}
+        </button>` : ''}
         <div><div class="section-title tight">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div class="been-wrap">
             <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div>
@@ -1200,6 +1287,23 @@
     if (!beenMap || !places.length) return;
     if (places.length === 1) beenMap.setView([places[0].lat, places[0].lng], 14);
     else beenMap.fitBounds(places.map(b => [b.lat, b.lng]), { padding: [36, 36], maxZoom: 14 });
+  }
+
+  function viewLeaderboard() {
+    const rows = monthlyLeaderboard();
+    const monthName = new Date().toLocaleDateString('en-GB', { month: 'long' });
+    const body = rows.length ? rows.map((x, i) => `<div class="row" data-go="#/u/${x.u.id}">
+        <span class="rank">${i + 1}</span>
+        ${avatar(x.u)}
+        <div class="grow"><b>${x.u.id === state.me ? 'You' : esc(x.u.name)}</b><div class="sub">@${esc(x.u.handle)}</div></div>
+        <b>${x.n}</b>
+      </div>`).join('') : `<div class="empty">Follow some critics to see a leaderboard.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Leaderboard</div></div>
+      <div class="pad"><div class="caps">${monthName} · places logged</div></div>
+      <div class="stack-6 pad">${body}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function viewFollowList(uid, kind) {
@@ -2344,6 +2448,7 @@
       case 'newlist': html = viewNewList(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
+      case 'leaderboard': html = viewLeaderboard(); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
@@ -2640,6 +2745,8 @@
       const b = BY_ID[draft.bid];
       const existing = myVisit(draft.bid);
       const snapshot = JSON.stringify(state);
+      const beforeBadges = new Set(badgesFor(state.me).filter(x => x.earned).map(x => x.id));
+      const beforeLevel = levelFor(state.me).title;
       const fields = { stars: draft.stars, note: draft.note.trim(), likes: draft.likes.slice(), visitedOn: draft.date, createdAt: Date.now() };
       if (existing) Object.assign(existing, fields, { photos: draft.photos.slice() });
       else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: draft.photos.slice() }, fields));
@@ -2661,7 +2768,13 @@
       bTab = 'critiques';
       trail.push('/b/' + bid);
       location.replace('#/b/' + bid);
+      // Newly unlocked badges/level, celebrated one at a time after the log toast clears.
+      const newBadges = badgesFor(state.me).filter(x => x.earned && !beforeBadges.has(x.id));
+      const afterLevel = levelFor(state.me).title;
+      const celebrations = newBadges.map(x => `🏆 Unlocked: ${x.label}`);
+      if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
       setTimeout(() => { celebrate(); toast(msg); }, 30);
+      celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
   };
 
