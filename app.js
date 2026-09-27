@@ -357,6 +357,24 @@
     for (let i = 0; i < LEVELS.length; i++) { if (xp >= LEVELS[i][0]) { title = LEVELS[i][1]; next = LEVELS[i + 1] || null; } }
     return { xp, title, next, floor: LEVELS.find(l => l[1] === title)[0] };
   }
+  // Weekly challenge: same for everyone, rotates deterministically by the week's date, resets Monday.
+  function weekStartTs(ts) { const d = new Date(ts); const day = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day); return d.getTime(); }
+  const CHALLENGES = [
+    { id: 'log3', label: 'Log 3 places this week', target: 3, count: vs => vs.length },
+    { id: 'rate5', label: 'Give something 5★ this week', target: 1, count: vs => vs.filter(v => v.stars === 5).length },
+    { id: 'photo', label: 'Add a photo to a log this week', target: 1, count: vs => vs.filter(v => v.photos && v.photos.length).length },
+    { id: 'note2', label: 'Write notes on 2 logs this week', target: 2, count: vs => vs.filter(v => v.note && v.note.trim()).length },
+    { id: 'style2', label: 'Log 2 places of the same style this week', target: 2, count: vs => { const m = {}; vs.forEach(v => { const b = BY_ID[v.buildingId]; if (b && b.style) m[b.style] = (m[b.style] || 0) + 1; }); return Object.values(m).reduce((a, n) => Math.max(a, n), 0); } },
+  ];
+  function challengeFor(uid) {
+    const weekStart = weekStartTs(Date.now());
+    const wk = new Date(weekStart).toISOString().slice(0, 10);
+    let h = 0; for (let i = 0; i < wk.length; i++) h = (h * 31 + wk.charCodeAt(i)) | 0;
+    const ch = CHALLENGES[Math.abs(h) % CHALLENGES.length];
+    const vs = visitsBy(uid).filter(v => v.createdAt >= weekStart && BY_ID[v.buildingId]);
+    const count = Math.min(ch.target, ch.count(vs));
+    return { ...ch, wk, count, done: count >= ch.target };
+  }
   // Monthly leaderboard among the people you follow, plus yourself.
   function monthlyLeaderboard() {
     const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
@@ -1188,6 +1206,15 @@
         })()}
         ${streakWeeks(uid) >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streakWeeks(uid)}-week streak</span>` : ''}
       </div>
+      ${own ? (() => {
+        const ch = challengeFor(uid);
+        const pct = Math.round(ch.count / ch.target * 100);
+        return `<div class="pad" style="padding-top:0;padding-bottom:14px"><div class="banner" style="display:flex;flex-direction:column;gap:8px">
+          <div class="row-flex" style="justify-content:space-between;align-items:center"><b class="small">This week's challenge</b>${ch.done ? `<span class="chip on">${icon('check', 'sm')}Done</span>` : ''}</div>
+          <div>${esc(ch.label)}</div>
+          <div class="row-flex" style="align-items:center;gap:8px"><div class="bar"><div style="width:${pct}%"></div></div><span class="tiny muted">${ch.count}/${ch.target}</span></div>
+        </div></div>`;
+      })() : ''}
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
@@ -2689,6 +2716,7 @@
       const snapshot = JSON.stringify(state);
       const beforeBadges = new Set(badgesFor(state.me).filter(x => x.earned).map(x => x.id));
       const beforeLevel = levelFor(state.me).title;
+      const challengeWasDone = challengeFor(state.me).done;
       const fields = { stars: draft.stars, note: draft.note.trim(), likes: draft.likes.slice(), visitedOn: draft.date, createdAt: Date.now() };
       if (existing) Object.assign(existing, fields, { photos: draft.photos.slice() });
       else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: draft.photos.slice() }, fields));
@@ -2715,6 +2743,8 @@
       const afterLevel = levelFor(state.me).title;
       const celebrations = newBadges.map(x => `🏆 Unlocked: ${x.label}`);
       if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
+      const challengeNow = challengeFor(state.me);
+      if (!challengeWasDone && challengeNow.done) celebrations.push(`✅ Challenge complete: ${challengeNow.label}`);
       setTimeout(() => { celebrate(); toast(msg); }, 30);
       celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
