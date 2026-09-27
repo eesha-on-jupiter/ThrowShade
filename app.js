@@ -238,6 +238,14 @@
     Object.entries(totals).forEach(([k, arr]) => { if (arr.reduce((s, n) => s + n, 0) / arr.length >= 4) favs.add(k); });
     return favs;
   }
+  // Taste compatibility: how closely two people's ratings agree on the places they've both logged.
+  function compatibility(a, b) {
+    const other = new Map(visitsBy(b).map(v => [v.buildingId, v.stars]));
+    const diffs = visitsBy(a).filter(v => other.has(v.buildingId)).map(v => Math.abs(v.stars - other.get(v.buildingId)));
+    if (diffs.length < 2) return null;
+    const avgDiff = diffs.reduce((s, n) => s + n, 0) / diffs.length;
+    return { pct: Math.round(100 - (avgDiff / 4) * 100), n: diffs.length };
+  }
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
   }
@@ -1012,6 +1020,13 @@
       ${own ? '' : `<div class="pad" style="margin-top:14px">${following
         ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
+      ${own ? '' : (() => {
+        const c = compatibility(state.me, uid);
+        return c ? `<div class="pad" style="margin-top:10px"><div class="banner" style="display:flex;align-items:center;gap:12px">
+          <b style="font-size:22px">${c.pct}%</b>
+          <div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div>
+        </div></div>` : '';
+      })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
