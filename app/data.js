@@ -196,6 +196,10 @@ window.TS_SEED_LISTS = [
   },
 ];
 
+// Sustainability certifications, hand-checked against the certifying body (USGBC has no public API), keyed by
+// building id: e.g. 'wd-Q123': ['LEED Gold']. The `leed` field on a hand-curated building above works too.
+window.TS_CERTS = {};
+
 // [userId, buildingId]
 window.TS_SEED_WANT = [
   ['u-mara', 'barbican'], ['u-mara', 'church-of-light'],

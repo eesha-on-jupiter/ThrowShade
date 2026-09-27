@@ -37,17 +37,55 @@
   }
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
-  // LEED badge: real, verified ratings (b.leed, hand-checked for a handful of buildings) win.
-  // Everywhere else this is an illustrative demo value only — deterministic per building, clearly
-  // labeled "(demo)" in the UI — never presented as a real certification for a real place.
-  const LEED_LEVELS = ['Certified', 'Silver', 'Gold', 'Platinum'];
-  function leedFor(b) {
-    if (b.leed) return { level: b.leed, real: true };
-    let h = 7;
-    for (let i = 0; i < b.id.length; i++) h = (h * 31 + b.id.charCodeAt(i)) | 0;
-    const n = Math.abs(h) % 10;
-    const level = LEED_LEVELS[Math.min(3, Math.floor(n / 2.5))];
-    return { level, real: false };
+  // Facts shown as small icons on a place and explained in About: certifications (hand-checked, app/data.js),
+  // landmark status / awards / Pritzker architects (Wikidata) and access (OpenStreetMap) — see tools/fetch_facts.py.
+  const HERITAGE_NAMES = {
+    'National Register of Historic Places listed place': 'National Register of Historic Places',
+    'National Register of Historic Places contributing property': 'National Register (contributing property)',
+    'part of UNESCO World Heritage Site': 'Part of a UNESCO World Heritage Site',
+    'Tentative World Heritage Site': 'UNESCO World Heritage tentative list',
+    'New York State Register of Historic Places listed place': 'New York State Register of Historic Places',
+  };
+  function factsFor(b) {
+    const f = (window.TS_FACTS || {})[b.id] || {};
+    const certs = [...(f.certs || []), ...(b.leed ? ['LEED ' + b.leed] : []), ...((window.TS_CERTS || {})[b.id] || [])];
+    return {
+      certs: [...new Set(certs)],
+      heritage: (f.heritage || []).map(h => HERITAGE_NAMES[h] || h),
+      awards: f.awards || [],
+      pritzker: f.pritzker || [],
+      access: f.access || {},
+    };
+  }
+  // One small icon per kind of fact; the title explains it, a tap scrolls to the details in About.
+  function factIcons(b, size) {
+    const f = factsFor(b), a = f.access, out = [];
+    const add = (name, title) => out.push(`<span class="fact-ic ${size || ''}" title="${esc(title)}" aria-label="${esc(title)}">${icon(name, 'sm')}</span>`);
+    if (f.certs.length) add('leaf', f.certs.join(' · '));
+    if (f.heritage.length) add('landmark', f.heritage.join(' · '));
+    if (f.awards.length || f.pritzker.length) add('award', [...f.awards, ...f.pritzker.map(p => `Pritzker Prize architect: ${p.name}`)].join(' · '));
+    if (a.wheelchair === 'yes' || a.wheelchair === 'limited') add('accessible', a.wheelchair === 'yes' ? 'Step-free access' : 'Limited step-free access');
+    if (a.fee === 'no') add('ticket', 'Free entry');
+    else if (a.fee === 'yes') add('ticket', 'Entry fee');
+    if (a.opening_hours) add('clock', 'Hours: ' + a.opening_hours);
+    return out.join('');
+  }
+  function factsHTML(b) {
+    const f = factsFor(b), a = f.access, rows = [];
+    const row = (ic, label, value) => rows.push(`<div class="fact-row">${icon(ic, 'sm')}<div><div class="caps">${label}</div><div class="small">${value}</div></div></div>`);
+    if (f.certs.length) row('leaf', 'Sustainability', esc(f.certs.join(' · ')));
+    if (f.heritage.length) row('landmark', 'Landmark status', esc(f.heritage.join(' · ')));
+    if (f.awards.length) row('award', 'Awards', esc(f.awards.join(' · ')));
+    if (f.pritzker.length) row('award', 'Pritzker Prize architect', esc(f.pritzker.map(p => p.name + (p.year ? ` (${p.year})` : '')).join(' · ')));
+    const access = [
+      a.wheelchair === 'yes' ? 'Step-free access' : a.wheelchair === 'limited' ? 'Limited step-free access' : a.wheelchair === 'no' ? 'Not step-free' : '',
+      a.fee === 'no' ? 'Free entry' : a.fee === 'yes' ? 'Entry fee' : '',
+      a.opening_hours ? 'Hours: ' + a.opening_hours : '',
+    ].filter(Boolean);
+    if (access.length || a.website) row('accessible', 'Access', esc(access.join(' · ')) + (a.website ? `${access.length ? ' · ' : ''}<a href="${esc(a.website)}" target="_blank" rel="noopener">Website</a>` : ''));
+    if (!rows.length) return '';
+    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', Object.keys(a).length && 'OpenStreetMap', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
+    return `<div id="facts" class="facts"><div class="bold">Recognition &amp; access</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
   }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
@@ -284,6 +322,11 @@
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+    landmark: '<path d="M3 21h18M5 21v-9M9.7 21v-9M14.3 21v-9M19 21v-9M2.5 9 12 3.5 21.5 9z"/>',
+    award: '<circle cx="12" cy="8.5" r="5.5"/><path d="m8.5 13.2-1.5 8.3 5-2.8 5 2.8-1.5-8.3"/>',
+    accessible: '<circle cx="15.5" cy="4" r="1.6"/><path d="M9 7.5l4.5-.5 1 5H19l1.5 5M8.8 11.2a5 5 0 1 0 6.1 7.1"/>',
+    ticket: '<path d="M3 8.5a2 2 0 0 0 0 4V16a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3.5a2 2 0 0 1 0-4V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" transform="translate(0 2)"/><path d="M14 6v2M14 11v2M14 16v2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
   };
   function icon(name, size) {
@@ -521,7 +564,7 @@
     // Tap the row to open the place; the + rates it straight away (the log flow used to live on the centre button).
     const placeRow = x => `<div class="row" data-go="#/b/${x.b.id}">
         ${ph(x.b, { style: 'width:38px;height:38px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc([KINDS[kindOf(x.b)] !== 'Building' && KINDS[kindOf(x.b)], makerLine(x.b), fmtKm(x.d)].filter(Boolean).join(' · '))}</div></div>
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}${factIcons(x.b, 'xs') ? `<span class="inline-facts">${factIcons(x.b, 'xs')}</span>` : ''}</div><div class="sub ellipsis">${esc([KINDS[kindOf(x.b)] !== 'Building' && KINDS[kindOf(x.b)], makerLine(x.b), fmtKm(x.d)].filter(Boolean).join(' · '))}</div></div>
         <button class="btn-sq thin" style="width:34px;height:34px" data-go="#/log/${x.b.id}" aria-label="Rate ${esc(x.b.name)}">${icon('plus', 'sm')}</button>
       </div>`;
     const pinLink = `<button class="btn dashed" style="height:48px;width:100%;margin-top:12px" data-act="pinfrommap">${icon('pin', 'sm')}Can’t find it? Drop a pin</button>`;
@@ -718,7 +761,6 @@
     const b = BY_ID[id];
     if (!b) return viewNotFound();
     const a = avgFor(b.id), mv = myVisit(b.id);
-    const leed = leedFor(b);
     const fids = followingIds(state.me);
     const vs = visitsFor(b.id).sort((x, y) =>
       (y.userId === state.me) - (x.userId === state.me) || fids.has(y.userId) - fids.has(x.userId) || y.createdAt - x.createdAt);
@@ -771,8 +813,9 @@
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
-          <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
-        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
+          <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div>
+          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition and access">${factIcons(b)}</button>` : ''}</div>
+        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -810,6 +853,7 @@
           ${b.address ? `<div class="small muted">${esc(b.address)}</div>` : ''}
           <div class="small muted">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}${adder ? ` · pinned by @${esc(adder.handle)}` : ''}</div>
           <div class="chips">${links}</div>
+          ${factsHTML(b)}
           ${visitTimingHTML(b)}
         </div>
         <div class="tabs">
@@ -1816,6 +1860,7 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    tofacts() { const el = document.getElementById('facts'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
     findtab(d) { findTab = d.k; findQ = ''; render(); },
     findpeople() { findTab = 'users'; findQ = ''; go('#/find'); },
     viewphoto(d) { const list = galleries[+d.g]; if (list) openViewer(list, +d.i); },
