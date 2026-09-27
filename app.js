@@ -19,7 +19,7 @@
   const STAR_WORDS = ['', 'Throwing shade', 'Not for me', 'It’s fine', 'Loved it', 'Pilgrimage-worthy'];
   // What a rater liked — toggled as chips in the log sheet, shown on the feed and summed per place.
   const ASPECTS = ['Design', 'Material', 'Structure', 'Facade', 'Light', 'Space', 'Interior', 'Detail', 'Craft',
-    'Context', 'Landscape', 'Views', 'Scale', 'Concept', 'Engineering', 'Atmosphere', 'Sustainability'];
+    'Context', 'Landscape', 'Views', 'Scale', 'Vibes', 'Engineering', 'Sustainability'];
   const KINDS = { building: 'Building', bridge: 'Bridge', art: 'Art', spot: 'Spot' };
   const kindOf = b => b.kind || 'building';
   const MAX_PHOTOS = 4;
@@ -37,22 +37,60 @@
   }
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
-  // LEED badge: real, verified ratings (b.leed, hand-checked for a handful of buildings) win.
-  // Everywhere else this is an illustrative demo value only — deterministic per building, clearly
-  // labeled "(demo)" in the UI — never presented as a real certification for a real place.
-  const LEED_LEVELS = ['Certified', 'Silver', 'Gold', 'Platinum'];
-  function leedFor(b) {
-    if (b.leed) return { level: b.leed, real: true };
-    let h = 7;
-    for (let i = 0; i < b.id.length; i++) h = (h * 31 + b.id.charCodeAt(i)) | 0;
-    const n = Math.abs(h) % 10;
-    const level = LEED_LEVELS[Math.min(3, Math.floor(n / 2.5))];
-    return { level, real: false };
+  // Facts shown as small icons on a place and explained in About: certifications (hand-checked, app/data.js),
+  // landmark status / awards / Pritzker architects (Wikidata) and access (OpenStreetMap) — see tools/fetch_facts.py.
+  const HERITAGE_NAMES = {
+    'National Register of Historic Places listed place': 'National Register of Historic Places',
+    'National Register of Historic Places contributing property': 'National Register (contributing property)',
+    'part of UNESCO World Heritage Site': 'Part of a UNESCO World Heritage Site',
+    'Tentative World Heritage Site': 'UNESCO World Heritage tentative list',
+    'New York State Register of Historic Places listed place': 'New York State Register of Historic Places',
+  };
+  function factsFor(b) {
+    const f = (window.TS_FACTS || {})[b.id] || {};
+    const certs = [...(f.certs || []), ...(b.leed ? ['LEED ' + b.leed] : []), ...((window.TS_CERTS || {})[b.id] || [])];
+    return {
+      certs: [...new Set(certs)],
+      heritage: (f.heritage || []).map(h => HERITAGE_NAMES[h] || h),
+      awards: f.awards || [],
+      pritzker: f.pritzker || [],
+      access: f.access || {},
+    };
+  }
+  // One small icon per kind of fact; the title explains it, a tap scrolls to the details in About.
+  function factIcons(b, size) {
+    const f = factsFor(b), a = f.access, out = [];
+    const add = (name, title) => out.push(`<span class="fact-ic ${size || ''}" title="${esc(title)}" aria-label="${esc(title)}">${icon(name, 'sm')}</span>`);
+    if (f.certs.length) add('leaf', f.certs.join(' · '));
+    if (f.heritage.length) add('landmark', f.heritage.join(' · '));
+    if (f.awards.length || f.pritzker.length) add('award', [...f.awards, ...f.pritzker.map(p => `Pritzker Prize architect: ${p.name}`)].join(' · '));
+    if (a.wheelchair === 'yes' || a.wheelchair === 'limited') add('accessible', a.wheelchair === 'yes' ? 'Step-free access' : 'Limited step-free access');
+    if (a.fee === 'no') add('ticket', 'Free entry');
+    else if (a.fee === 'yes') add('ticket', 'Entry fee');
+    if (a.opening_hours) add('clock', 'Hours: ' + a.opening_hours);
+    return out.join('');
+  }
+  function factsHTML(b) {
+    const f = factsFor(b), a = f.access, rows = [];
+    const row = (ic, label, value) => rows.push(`<div class="fact-row">${icon(ic, 'sm')}<div><div class="caps">${label}</div><div class="small">${value}</div></div></div>`);
+    if (f.certs.length) row('leaf', 'Sustainability', esc(f.certs.join(' · ')));
+    if (f.heritage.length) row('landmark', 'Landmark status', esc(f.heritage.join(' · ')));
+    if (f.awards.length) row('award', 'Awards', esc(f.awards.join(' · ')));
+    if (f.pritzker.length) row('award', 'Pritzker Prize architect', esc(f.pritzker.map(p => p.name + (p.year ? ` (${p.year})` : '')).join(' · ')));
+    const access = [
+      a.wheelchair === 'yes' ? 'Step-free access' : a.wheelchair === 'limited' ? 'Limited step-free access' : a.wheelchair === 'no' ? 'Not step-free' : '',
+      a.fee === 'no' ? 'Free entry' : a.fee === 'yes' ? 'Entry fee' : '',
+      a.opening_hours ? 'Hours: ' + a.opening_hours : '',
+    ].filter(Boolean);
+    if (access.length || a.website) row('accessible', 'Access', esc(access.join(' · ')) + (a.website ? `${access.length ? ' · ' : ''}<a href="${esc(a.website)}" target="_blank" rel="noopener">Website</a>` : ''));
+    if (!rows.length) return '';
+    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', Object.keys(a).length && 'OpenStreetMap', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
+    return `<div id="facts" class="facts"><div class="bold">Recognition &amp; access</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
   }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
-    Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Concept'],
-    Deconstructivist: ['Design', 'Concept', 'Facade'], 'Art Deco': ['Facade', 'Detail', 'Craft'], 'High-tech': ['Structure', 'Engineering', 'Design'],
+    Brutalist: ['Material', 'Structure', 'Scale'], Modernist: ['Design', 'Light', 'Space'], Postmodern: ['Facade', 'Detail', 'Vibes'],
+    Deconstructivist: ['Design', 'Vibes', 'Facade'], 'Art Deco': ['Facade', 'Detail', 'Craft'], 'High-tech': ['Structure', 'Engineering', 'Design'],
     Contemporary: ['Design', 'Material', 'Context'], Historic: ['Craft', 'Detail', 'Facade'],
   };
 
@@ -64,6 +102,8 @@
     if (!v.photos) v.photos = v.photo ? [v.photo] : [];
     delete v.photo;
     if (!v.likes) v.likes = [];
+    // "Concept" and "Atmosphere" were folded into "Vibes".
+    v.likes = [...new Set(v.likes.map(l => (l === 'Concept' || l === 'Atmosphere' ? 'Vibes' : l)))];
   });
   // (Re)apply stand-in photos to seeded posts; photos people uploaded (data: URLs) are never touched.
   if (state.seedPhotos !== 3) {
@@ -77,6 +117,10 @@
   window.TS_SEED_USERS.forEach(s => {
     const u = state.users.find(x => x.id === s.id);
     if (u && !u.photo && s.photo) u.photo = s.photo;
+    if (!u && !state.users.some(x => x.handle === s.handle)) {  // skip if someone already signed up with that handle
+      state.users.forEach(o => { state.follows.push([s.id, o.id]); state.follows.push([o.id, s.id]); });
+      state.users.push({ ...s });
+    }
   });
 
   function seed() {
@@ -131,6 +175,16 @@
       .sort((x, y) => y.a.avg - x.a.avg || y.a.n - x.a.n)
       .slice(0, limit || 10);
   }
+  // Trending: most-logged places community-wide in the last 7 days.
+  function trending(limit) {
+    const since = Date.now() - 7 * DAY;
+    const counts = {};
+    state.visits.forEach(v => { if (v.createdAt >= since) counts[v.buildingId] = (counts[v.buildingId] || 0) + 1; });
+    return Object.entries(counts).map(([bid, n]) => ({ b: BY_ID[bid], n }))
+      .filter(x => x.b)
+      .sort((x, y) => y.n - x.n || (avgFor(y.b.id).avg || 0) - (avgFor(x.b.id).avg || 0))
+      .slice(0, limit || 10);
+  }
   // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
   function recsFor(uid, limit) {
     const visited = new Set(visitsBy(uid).map(v => v.buildingId));
@@ -148,44 +202,104 @@
       const friendVs = visitsFor(b.id).filter(v => fids.has(v.userId));
       const friendAvg = friendVs.length ? friendVs.reduce((s, v) => s + v.stars, 0) / friendVs.length : 0;
       const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
-      let score = 0, reason = null;
-      if (friendAvg >= 4) { score += friendAvg * 3; reason = friendVs.length > 1 ? `${friendVs.length} friends loved it` : 'A friend loved it'; }
-      if (!reason && favStyles.has(b.style)) { score += 4; reason = `You tend to love ${b.style}`; }
-      if (!reason && d < 3) { score += 2; reason = 'Right nearby'; }
+      let score = 0, reason = null, group = null;
+      if (friendAvg >= 4) {
+        score += friendAvg * 3; group = 'friends';
+        const one = friendVs.length === 1 && user(friendVs[0].userId);
+        reason = one ? `@${one.handle} gave it ${friendVs[0].stars}★` : `${friendVs.length} friends loved it`;
+      }
+      if (!reason && favStyles.has(b.style)) { score += 4; group = 'style:' + b.style; reason = `You tend to love ${b.style}`; }
+      if (!reason && d < 3) { score += 2; group = 'nearby'; reason = 'Right nearby'; }
       score += Math.max(0, 2 - d / 15);
-      return { b, score, reason, d };
+      return { b, score, reason, group, d };
     }).filter(x => x.reason);
     scored.sort((x, y) => y.score - x.score);
-    if (scored.length < (limit || 12)) {
-      const already = new Set(scored.map(x => x.b.id));
+    // Cap how many any one category can contribute, so friend-based recs (which score highest)
+    // don't crowd out every other reason — the point is a mix, not one dominant list.
+    const counts = {};
+    const capped = scored.filter(x => {
+      counts[x.group] = (counts[x.group] || 0) + 1;
+      return counts[x.group] <= (x.group === 'friends' ? 6 : 4);
+    });
+    const L = limit || 12;
+    if (capped.length < L) {
+      const already = new Set(capped.map(x => x.b.id));
       topRated(40).forEach(x => {
-        if (scored.length >= (limit || 12)) return;
+        if (capped.length >= L || (counts.top || 0) >= 4) return;
         if (visited.has(x.b.id) || already.has(x.b.id)) return;
-        scored.push({ b: x.b, score: 0, reason: 'Highly rated', d: distMap.get(x.b.id) });
+        capped.push({ b: x.b, score: 0, reason: 'Highly rated overall', group: 'top', d: distMap.get(x.b.id) });
+        counts.top = (counts.top || 0) + 1;
         already.add(x.b.id);
       });
     }
-    return scored.slice(0, limit || 12);
+    return capped.slice(0, L);
   }
-  // Guides: shelves grouped by style, kind and city — built from whatever data already exists.
-  function buildGuides() {
+  function recGroupLabel(g) {
+    if (g.startsWith('style:')) return `More ${g.slice(6)} for you`;
+    return { friends: 'Friends loved these', nearby: 'Near you', top: 'Highly rated' }[g] || 'Recommended';
+  }
+  // Guides: shelves grouped by style, kind, city, architect and decade — built from whatever data
+  // already exists. Each shelf carries a dim/key so it can filter the full list ("See all") and so
+  // shelves matching the viewer's own taste (styles/architects/cities they've rated well) sort first.
+  function buildGuides(uid) {
     const guides = [];
+    const push = (dim, key, title, list) => guides.push({ dim, key, title, sub: `${list.length} places`, items: rankByRating(list) });
     const byStyle = {};
     BUILDINGS.forEach(b => { if (b.style) (byStyle[b.style] = byStyle[b.style] || []).push(b); });
     Object.entries(byStyle).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 4)
-      .forEach(([style, list]) => guides.push({ title: style, sub: `${list.length} places`, items: rankByRating(list) }));
+      .forEach(([style, list]) => push('style', style, style, list));
     ['bridge', 'art', 'spot'].forEach(k => {
       const list = BUILDINGS.filter(b => kindOf(b) === k);
-      if (list.length) guides.push({ title: KINDS[k] + 's', sub: `${list.length} places`, items: rankByRating(list) });
+      if (list.length) push('kind', k, KINDS[k] + 's', list);
     });
     const byCity = {};
     BUILDINGS.forEach(b => { if (b.city) (byCity[b.city] = byCity[b.city] || []).push(b); });
     const topCity = Object.entries(byCity).sort((a, b) => b[1].length - a[1].length)[0];
-    if (topCity && topCity[1].length >= 3) guides.push({ title: topCity[0], sub: `${topCity[1].length} places`, items: rankByRating(topCity[1]) });
+    if (topCity && topCity[1].length >= 3) push('city', topCity[0], topCity[0], topCity[1]);
+    const byArchitect = {};
+    BUILDINGS.forEach(b => { if (b.architect) (byArchitect[b.architect] = byArchitect[b.architect] || []).push(b); });
+    Object.entries(byArchitect).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([architect, list]) => push('architect', architect, architect, list));
+    const byDecade = {};
+    BUILDINGS.forEach(b => { if (b.year) { const d = `${Math.floor(b.year / 10) * 10}s`; (byDecade[d] = byDecade[d] || []).push(b); } });
+    Object.entries(byDecade).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([decade, list]) => push('decade', decade, decade, list));
+    if (uid) {
+      const favs = favoritesOf(uid);
+      const isFav = g => favs.has(g.dim + ':' + g.key);
+      return guides.filter(isFav).concat(guides.filter(g => !isFav(g)));
+    }
     return guides;
+  }
+  // Dims (style/architect/city) the viewer tends to rate 4★+ on their own visits.
+  function favoritesOf(uid) {
+    const totals = {};
+    visitsBy(uid).forEach(v => {
+      const b = BY_ID[v.buildingId]; if (!b) return;
+      ['style', 'architect', 'city'].forEach(dim => { if (b[dim]) (totals[dim + ':' + b[dim]] = totals[dim + ':' + b[dim]] || []).push(v.stars); });
+    });
+    const favs = new Set();
+    Object.entries(totals).forEach(([k, arr]) => { if (arr.reduce((s, n) => s + n, 0) / arr.length >= 4) favs.add(k); });
+    return favs;
+  }
+  // Taste compatibility: how closely two people's ratings agree on the places they've both logged.
+  function compatibility(a, b) {
+    const other = new Map(visitsBy(b).map(v => [v.buildingId, v.stars]));
+    const diffs = visitsBy(a).filter(v => other.has(v.buildingId)).map(v => Math.abs(v.stars - other.get(v.buildingId)));
+    if (diffs.length < 2) return null;
+    const avgDiff = diffs.reduce((s, n) => s + n, 0) / diffs.length;
+    return { pct: Math.round(100 - (avgDiff / 4) * 100), n: diffs.length };
   }
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
+  function guideBuildings(dim, key) {
+    if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
+    if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
+    if (dim === 'city') return BUILDINGS.filter(b => b.city === key);
+    if (dim === 'architect') return BUILDINGS.filter(b => b.architect === key);
+    if (dim === 'decade') return BUILDINGS.filter(b => b.year && `${Math.floor(b.year / 10) * 10}s` === key);
+    return [];
   }
   function photoFor(bid) {
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
@@ -276,8 +390,14 @@
     edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
     switch: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
     reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/>',
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+    landmark: '<path d="M3 21h18M5 21v-9M9.7 21v-9M14.3 21v-9M19 21v-9M2.5 9 12 3.5 21.5 9z"/>',
+    award: '<circle cx="12" cy="8.5" r="5.5"/><path d="m8.5 13.2-1.5 8.3 5-2.8 5 2.8-1.5-8.3"/>',
+    accessible: '<circle cx="15.5" cy="4" r="1.6"/><path d="M9 7.5l4.5-.5 1 5H19l1.5 5M8.8 11.2a5 5 0 1 0 6.1 7.1"/>',
+    ticket: '<path d="M3 8.5a2 2 0 0 0 0 4V16a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3.5a2 2 0 0 1 0-4V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" transform="translate(0 2)"/><path d="M14 6v2M14 11v2M14 16v2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
     flame: '<path d="M12 2c2 3-2 4-2 7a3 3 0 0 0 6 0c1.5 2 2 4 2 6a6 6 0 1 1-12 0c0-4 3-5 3-9 0-1.5.5-3 3-4z"/>',
   };
@@ -388,7 +508,7 @@
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home', 'home')}
       ${item('lists', '#/lists', 'Lists', 'bookmark')}
-      <a href="#/log" class="plus" aria-label="Log a building">${icon('plus')}</a>
+      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people">${icon('search')}</a>
       ${item('map', '#/map', 'Map', 'map')}
       ${item('you', '#/me', 'You', 'user')}
     </nav>`;
@@ -412,13 +532,24 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
-  let findTab = 'buildings', findQ = '';
+  let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
-  let epPhoto;
+  let pickedPhoto;
+  // Profile picture chosen on sign-in or in Edit profile, applied on submit.
+  function setPicked(src) {
+    pickedPhoto = src;
+    document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+    const pv = document.getElementById('su-avatar');
+    if (pv) pv.style.backgroundImage = `url('${src}')`;
+  }
+  function randomAvatar(except) {
+    const pool = PRESET_AVATARS.filter(p => p !== except);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   const trail = [];
 
   // ---------- Views ----------
@@ -429,10 +560,14 @@
         <div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)}</div></div>
         <span class="small">${visitsBy(u.id).length} logged</span>
       </button>`).join('');
+    // New sign-ups start with a random preset; the refresh button rolls another.
+    if (!pickedPhoto) pickedPhoto = randomAvatar();
     return `<div class="screen"><div class="signin">
       <div class="mark-group">${logoSVG(40)}<div class="mark">throwShade</div></div>
       <div class="muted">Rate every building you walk into. Find the next one worth the trip.</div>
-      <div class="hero-strip">${['wd-Q653584', 'wd-Q753180', 'wd-Q929965'].filter(id => BY_ID[id]).map(id => ph(BY_ID[id], { w: 360, go: false })).join('') || `<div class="ph hatch-band" style="${hatch(INK)}"></div>`}</div>
+      <div class="signin-avatar">
+        <button class="avatar-edit" data-act="shuffleavatar" aria-label="Try another profile picture"><div class="avatar lg" id="su-avatar" style="background-image:url('${pickedPhoto}')"></div><span class="avatar-edit-badge">${icon('refresh', 'sm')}</span></button>
+      </div>
       <div class="field"><label for="su-name">Display name</label><input id="su-name" class="input" placeholder="Ada Critic" autocomplete="off"></div>
       <div class="field"><label for="su-handle">Handle</label><input id="su-handle" class="input" placeholder="ada.c" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <button class="btn-primary" data-act="signup">Start throwing shade</button>
@@ -466,7 +601,7 @@
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}<button class="btn-sq" aria-label="Search" data-go="#/find">${icon('search')}</button></div>`;
+      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}</div>`;
     if (tab === 'map') {
       const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
@@ -500,28 +635,39 @@
     const fids = followingIds(state.me);
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
-      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-go="#/find?people">${icon('users', 'sm')}Find people</button>`;
-    const top = topRated(10);
-    const rail = top.length ? `<div class="pad"><div class="section-title">Top rated<button class="link" data-go="#/top">See all${icon('chevron', 'sm')}</button></div></div>
-      <div class="rail">${top.map((x, i) => `<button class="rail-item" data-go="#/b/${x.b.id}">
-        ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false, inner: `<span class="rail-rank">${i + 1}</span>` })}
-        <div class="rail-name ellipsis">${esc(x.b.name)}</div>
-        <div class="rail-meta">${scoreHTML(x.a.avg.toFixed(1))}<span class="muted">· ${x.a.n}</span></div>
-      </button>`).join('')}</div>
-      <div class="pad" style="padding-top:24px"><div class="section-title">Latest</div></div>` : '';
-    return `<div class="screen with-nav">${head}${rail}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+      `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-act="findpeople">${icon('users', 'sm')}Find people</button>`;
+    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
-  function viewTopRated() {
-    const list = topRated(50);
+  function viewGuide(dim, key) {
+    const list = rankByRating(guideBuildings(dim, key));
+    const title = dim === 'kind' ? KINDS[key] + 's' : key;
+    const rows = list.length ? list.map((b, i) => {
+      const a = avgFor(b.id);
+      return `<button class="row" data-go="#/b/${b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(makerLine(b))}</div></div>
+        ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
+      </button>`;
+    }).join('') : `<div class="empty">Nothing here yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">${esc(title)}</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewTrending() {
+    const list = trending(50);
     const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
         <span class="rank">${i + 1}</span>
         ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
         <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
-        ${scoreHTML(x.a.avg.toFixed(1))}
-      </button>`).join('') : `<div class="empty">Nothing rated yet.</div>`;
+        <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
+      </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Top rated</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -537,39 +683,44 @@
 
   function findResults() {
     const q = findQ.trim().toLowerCase();
-    if (findTab === 'people') {
-      const people = state.users.filter(u => u.id !== state.me && (!q || u.handle.includes(q) || u.name.toLowerCase().includes(q)));
-      if (!people.length) return `<div class="empty">No one matches “${esc(findQ)}”.</div>`;
-      return people.map(u => {
-        const f = isFollowing(state.me, u.id);
-        return `<div class="row" data-go="#/u/${u.id}">
-          ${avatar(u)}<div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)} · ${visitsBy(u.id).length} logged</div></div>
-          <button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${u.id}">${f ? 'Following' : 'Follow'}</button>
-        </div>`;
-      }).join('');
+    const section = (title, rows) => rows.length ? `<div class="caps find-section">${title}</div>${rows.join('')}` : '';
+    const personRow = u => {
+      const f = isFollowing(state.me, u.id);
+      return `<div class="row" data-go="#/u/${u.id}">
+        ${avatar(u)}<div class="grow"><b>${esc(u.name)}</b><div class="sub">@${esc(u.handle)} · ${visitsBy(u.id).length} logged</div></div>
+        <button class="btn ${f ? '' : 'on'}" data-act="follow" data-id="${u.id}">${f ? 'Following' : 'Follow'}</button>
+      </div>`;
+    };
+    // Tap the row to open the place; the + rates it straight away (the log flow used to live on the centre button).
+    const placeRow = x => `<div class="row" data-go="#/b/${x.b.id}">
+        ${ph(x.b, { style: 'width:38px;height:38px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}${factIcons(x.b, 'xs') ? `<span class="inline-facts">${factIcons(x.b, 'xs')}</span>` : ''}</div><div class="sub ellipsis">${esc([KINDS[kindOf(x.b)] !== 'Building' && KINDS[kindOf(x.b)], makerLine(x.b), fmtKm(x.d)].filter(Boolean).join(' · '))}</div></div>
+        <button class="btn-sq thin" style="width:34px;height:34px" data-go="#/log/${x.b.id}" aria-label="Rate ${esc(x.b.name)}">${icon('plus', 'sm')}</button>
+      </div>`;
+    const pinLink = `<button class="btn dashed" style="height:48px;width:100%;margin-top:12px" data-act="pinfrommap">${icon('pin', 'sm')}Can’t find it? Drop a pin</button>`;
+    if (findTab === 'users') {
+      const others = state.users.filter(u => u.id !== state.me).sort((a, b) => a.name.localeCompare(b.name));
+      const people = q ? others.filter(u => u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)) : others;
+      if (!people.length) return `<div class="empty" style="margin-top:12px">No users match “${esc(findQ)}”.</div>`;
+      return section(q ? 'Users' : `All users · ${people.length}`, people.map(personRow));
     }
-    let list;
-    if (!q) {
-      list = nearest(BUILDINGS).slice(0, 15);
-      return `<div class="caps">Nearby · ${locNote()}</div>` + list.map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
-    }
-    list = BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q));
-    if (!list.length) return `<div class="empty">No places match “${esc(findQ)}”.</div><button class="btn dashed" style="height:48px;width:100%" data-act="pinfrommap">${icon('pin', 'sm')}Drop a pin to add it</button>`;
-    return nearest(list).map(x => buildingRow(x.b, `<span class="small muted">${fmtKm(x.d)}</span>`)).join('');
+    if (!q) return section(`Nearby · ${locNote()}`, nearest(BUILDINGS).slice(0, 15).map(placeRow)) + pinLink;
+    const places = nearest(BUILDINGS.filter(b => [b.name, b.architect, b.city, b.country, b.style, b.typology, KINDS[kindOf(b)]].join(' ').toLowerCase().includes(q))).slice(0, 40);
+    if (!places.length) return `<div class="empty" style="margin-top:12px">No architecture matches “${esc(findQ)}”.</div>` + pinLink;
+    return section('Architecture', places.map(placeRow)) + pinLink;
   }
 
-  function viewFind(qs) {
-    if (qs === 'people') findTab = 'people';
+  function viewFind() {
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Find</div></div>
-      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="Buildings, bridges, art, people" autocomplete="off" autocapitalize="none"></div>
-      <div class="tabs" style="margin:8px 16px 12px">
-        <button class="${findTab === 'buildings' ? 'on' : ''}" data-act="findtab" data-k="buildings">Places</button>
-        <button class="${findTab === 'people' ? 'on' : ''}" data-act="findtab" data-k="people">People</button>
+      <div class="topbar"><div class="h1">Search</div></div>
+      <div class="tabs" style="margin:0 20px 12px">
+        <button class="${findTab === 'arch' ? 'on' : ''}" data-act="findtab" data-k="arch">Architecture</button>
+        <button class="${findTab === 'users' ? 'on' : ''}" data-act="findtab" data-k="users">Users</button>
       </div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="${findTab === 'users' ? 'Search users by name or handle' : 'Search buildings, bridges, art, architects, cities'}" autocomplete="off" autocapitalize="none"></div>
       <div id="results" class="stack-6 pad">${findResults()}</div>
       <div class="spacer"></div>
-    </div>${nav('')}`;
+    </div>${nav('find')}`;
   }
 
   // ---------- Lists: Want to Visit (private) + custom lists shared with invited members ----------
@@ -598,27 +749,57 @@
       <button class="${tab === 'guides' ? 'on' : ''}" data-go="#/lists/guides">Guides</button></div>`;
     let body;
     if (tab === 'recs') {
-      const recs = recsFor(state.me, 12);
-      body = `<div class="stack-6 pad">${recs.length ? recs.map(x => `<div class="row" data-go="#/b/${x.b.id}">
-          ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
-          <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
-          <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
-        </div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
+      const recs = recsFor(state.me, 16);
+      const groups = [];
+      const byGroup = {};
+      recs.forEach(x => {
+        if (!byGroup[x.group]) { byGroup[x.group] = { label: recGroupLabel(x.group), items: [] }; groups.push(byGroup[x.group]); }
+        byGroup[x.group].items.push(x);
+      });
+      body = `<div class="pad">${groups.length ? groups.map(g => `
+        <div class="section-title" style="margin-top:8px">${esc(g.label)}</div>
+        <div class="stack-6" style="margin-bottom:8px">${g.items.map(x => {
+          const a = avgFor(x.b.id);
+          return `<div class="row" data-go="#/b/${x.b.id}">
+            ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+            <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
+            ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
+            <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
+          </div>`;
+        }).join('')}</div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
     } else if (tab === 'guides') {
-      const guides = buildGuides();
-      body = `<div class="pad">${guides.length ? guides.map(g => `
-        <div class="section-title" style="margin-top:8px">${esc(g.title)}<span class="muted small">${esc(g.sub)}</span></div>
+      const trend = trending(10);
+      const trendShelf = trend.length ? `
+        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
+          ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
+          <div class="rail-name ellipsis">${esc(x.b.name)}</div>
+          <div class="rail-meta muted">${x.n} log${x.n === 1 ? '' : 's'} this week</div>
+        </button>`).join('')}</div>` : '';
+      const guides = buildGuides(state.me);
+      body = `<div class="pad">${trendShelf}${guides.length ? guides.map(g => `
+        <div class="section-title" style="margin-top:8px"><span>${esc(g.title)} <span class="muted small">· ${esc(g.sub)}</span></span><button class="link" data-go="#/guide/${g.dim}/${encodeURIComponent(g.key)}">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${g.items.slice(0, 10).map(b => `<button class="rail-item" data-go="#/b/${b.id}">
           ${ph(b, { w: 300, cls: 'rail-photo', label: phLabel(b), go: false })}
           <div class="rail-name ellipsis">${esc(b.name)}</div>
           <div class="rail-meta muted">${esc(b.city || '')}</div>
-        </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
+        </button>`).join('')}</div>`).join('') : (trendShelf ? '' : `<div class="empty">Nothing to group yet.</div>`)}</div>`;
     } else {
-      const want = state.want.filter(w => w.userId === state.me).length;
+      const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+      const beenCover = vs.length && BY_ID[vs[0].buildingId];
+      const wantItems = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
+      const want = wantItems.length;
+      const wantCover = want && BY_ID[wantItems[0].buildingId];
       const lists = myLists();
       body = `<div class="stack-6 pad">
+        ${!vs.length && !want && !lists.length ? `<div class="empty">Lists are how you collect places — start with Want to Visit, or make your own to share with friends, like "Chicago rooftop bars."</div>` : ''}
+        <button class="row" data-go="#/list/been">
+          ${beenCover ? ph(beenCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('check')}</div>`}
+          <div class="grow"><b>Been</b><div class="sub">${vs.length} place${vs.length === 1 ? '' : 's'} logged · only you</div></div>
+          ${icon('chevron', 'sm')}
+        </button>
         <button class="row" data-go="#/list/want">
-          <div class="list-icon">${icon('bookmark')}</div>
+          ${wantCover ? ph(wantCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`}
           <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
           ${icon('chevron', 'sm')}
         </button>
@@ -654,6 +835,24 @@
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Want to Visit</div></div>
       <div class="stack-6 pad">${rows || '<div class="empty">Nothing saved yet.<br>Tap Save on any place.</div>'}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
+  function viewBeenList() {
+    const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const rows = vs.map((v, i) => {
+      const b = BY_ID[v.buildingId];
+      return `<button class="row" data-go="#/b/${b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(b, { w: 120, style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)} · ${fmtDate(v.visitedOn)}</div></div>
+        ${starsHTML(v.stars)}
+      </button>`;
+    }).join('');
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Been</div></div>
+      <div class="stack-6 pad">${rows || '<div class="empty">You haven’t logged anything yet.<br>Tap the + to throw shade at your first place.</div>'}</div>
       <div class="spacer"></div>
     </div>${nav('lists')}`;
   }
@@ -740,7 +939,6 @@
     const b = BY_ID[id];
     if (!b) return viewNotFound();
     const a = avgFor(b.id), mv = myVisit(b.id);
-    const leed = leedFor(b);
     const fids = followingIds(state.me);
     const vs = visitsFor(b.id).sort((x, y) =>
       (y.userId === state.me) - (x.userId === state.me) || fids.has(y.userId) - fids.has(x.userId) || y.createdAt - x.createdAt);
@@ -793,8 +991,9 @@
       ${credit}
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
-          <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
-        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
+          <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div>
+          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition and access">${factIcons(b)}</button>` : ''}</div>
+        <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -832,6 +1031,7 @@
           ${b.address ? `<div class="small muted">${esc(b.address)}</div>` : ''}
           <div class="small muted">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}${adder ? ` · pinned by @${esc(adder.handle)}` : ''}</div>
           <div class="chips">${links}</div>
+          ${factsHTML(b)}
         </div>
         ${visitTimingHTML(b)}
         <div class="tabs">
@@ -862,12 +1062,11 @@
     const following = isFollowing(state.me, uid);
     return `<div class="screen with-nav">
       <div class="topbar" style="padding-bottom:0">${own ? '<div class="grow"></div>' : `<button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="grow"></div>`}
-        ${own ? `<button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button>` : ''}</div>
+      </div>
       <div style="display:flex;gap:14px;align-items:center;padding:16px 20px">
-        ${own ? `<label class="avatar-edit" for="avatar-in" aria-label="Change profile photo">${avatar(u, 'lg').replace('data-go', 'data-x')}<span class="avatar-edit-badge">${icon('camera', 'sm')}</span></label>
-          <input id="avatar-in" type="file" accept="image/*" hidden data-change="avatarphoto">`
-          : avatar(u, 'lg').replace('data-go', 'data-x')}
+        ${avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
+        ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
       </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
@@ -878,6 +1077,13 @@
       ${own ? '' : `<div class="pad" style="margin-top:14px">${following
         ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
+      ${own ? '' : (() => {
+        const c = compatibility(state.me, uid);
+        return c ? `<div class="pad" style="margin-top:10px"><div class="banner" style="display:flex;align-items:center;gap:12px">
+          <b style="font-size:22px">${c.pct}%</b>
+          <div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div>
+        </div></div>` : '';
+      })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
@@ -954,10 +1160,13 @@
 
   function viewEditProfile() {
     const u = me();
+    // 15 random presets, always including the current one so it shows as selected.
+    const picks = PRESET_AVATARS.filter(p => p !== u.photo).sort(() => Math.random() - .5).slice(0, PRESET_AVATARS.includes(u.photo) ? 14 : 15);
+    if (PRESET_AVATARS.includes(u.photo)) picks.splice(Math.floor(Math.random() * 15), 0, u.photo);
     return sheet('Edit profile', 1, 1,
       `<button class="btn-sq thin" data-act="closeedit" aria-label="Close">${icon('x')}</button>`,
       `<div class="field"><div class="label">Profile picture</div>
-         <div class="avatar-picker">${PRESET_AVATARS.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
+         <div class="avatar-picker">${picks.map(p => `<button class="avatar-pick ${u.photo === p ? 'on' : ''}" data-act="pickavatar" data-src="${p}" style="background-image:url('${p}')" aria-label="Choose this picture"></button>`).join('')}</div></div>
        <div class="field"><label for="ep-name">Display name</label><input id="ep-name" class="input" value="${esc(u.name)}" maxlength="40"></div>
        <div class="field"><label for="ep-handle">Handle</label><input id="ep-handle" class="input" value="${esc(u.handle)}" maxlength="20" autocapitalize="none"></div>
        <div class="field"><label for="ep-bio">Bio</label><textarea id="ep-bio" class="input" data-input="epbio" maxlength="140" style="height:80px">${esc(u.bio || '')}</textarea>
@@ -1686,12 +1895,13 @@
       case 'signin': html = viewSignin(); break;
       case 'feed': html = viewHome('feed'); break;
       case 'map': html = viewHome('map'); after = initMap; break;
-      case 'find': html = viewFind(qs); break;
+      case 'find': html = viewFind(); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
-      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
+      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[1] === 'been' ? viewBeenList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
       case 'save': html = viewSaveTo(seg[1]); break;
       case 'newlist': html = viewNewList(); break;
-      case 'top': html = viewTopRated(); break;
+      case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
+      case 'trending': html = viewTrending(); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
@@ -1729,7 +1939,8 @@
       if (state.users.some(u => u.handle === handle)) return toast('@' + handle + ' is taken');
       const id = 'u-' + Date.now().toString(36);
       const others = state.users.map(u => u.id);
-      state.users.push({ id, handle, name, bio: '' });
+      state.users.push(Object.assign({ id, handle, name, bio: '' }, pickedPhoto ? { photo: pickedPhoto } : {}));
+      pickedPhoto = undefined;
       // Demo: follow everyone, and everyone follows you back, so your logs show up in their feeds.
       others.forEach(o => { state.follows.push([id, o]); state.follows.push([o, id]); });
       state.lists.filter(l => l.invitesNewUsers).forEach(l => l.members.push(id));
@@ -1738,7 +1949,7 @@
       go('#/feed');
       setTimeout(() => { celebrate(); toast('Welcome, @' + handle); }, 30);
     },
-    login(d) { state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
+    login(d) { pickedPhoto = undefined; state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
@@ -1810,7 +2021,6 @@
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
     },
-    findtab(d) { findTab = d.k; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
@@ -1833,15 +2043,18 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    tofacts() { const el = document.getElementById('facts'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+    findtab(d) { findTab = d.k; findQ = ''; render(); },
+    findpeople() { findTab = 'users'; findQ = ''; go('#/find'); },
     viewphoto(d) { const list = galleries[+d.g]; if (list) openViewer(list, +d.i); },
     lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
     lbprev() { stepViewer(-1); },
     lbnext() { stepViewer(1); },
-    closeedit() { epPhoto = undefined; back(); },
-    // Only marks the choice; the name/bio inputs keep their edits because the sheet isn't re-rendered.
+    closeedit() { pickedPhoto = undefined; back(); },
+    // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
+    shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
     pickavatar(d, el) {
-      epPhoto = d.src;
-      document.querySelectorAll('.avatar-pick.on').forEach(x => x.classList.remove('on'));
+      setPicked(d.src);
       el.classList.add('on');
     },
     saveprofile() {
@@ -1853,8 +2066,8 @@
       if (!/^[a-z0-9._]{2,20}$/.test(handle)) return toast('Handle: 2–20 letters, numbers, dots or underscores');
       if (handle !== u.handle && state.users.some(x => x.handle === handle)) return toast('@' + handle + ' is taken');
       u.name = name; u.handle = handle; u.bio = bio;
-      if (epPhoto) u.photo = epPhoto;
-      epPhoto = undefined;
+      if (pickedPhoto) u.photo = pickedPhoto;
+      pickedPhoto = undefined;
       save(); Sound.success();
       back(); toast('Profile updated');
     },
@@ -1992,13 +2205,6 @@
         else if (!url) toast('Couldn’t read one of those images');
         if (--pending === 0) render();
       }));
-    }
-    if (e.target.dataset && e.target.dataset.change === 'avatarphoto' && e.target.files[0]) {
-      resizeImage(e.target.files[0], 300, url => {
-        if (!url) return toast('Couldn’t read that image');
-        me().photo = url;
-        save(); Sound.success(); render();
-      });
     }
   });
   root.addEventListener('keydown', e => {
