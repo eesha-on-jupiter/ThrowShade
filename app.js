@@ -794,7 +794,6 @@
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div></div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}${leed ? `<span class="chip leed ${leed.real && leed.level === 'Platinum' ? 'leed-top' : ''} ${leed.real ? '' : 'dashed'}" title="${leed.real ? 'LEED certified' : 'Illustrative demo rating — not a verified certification'}">${icon('leaf', 'sm')}LEED ${esc(leed.level)}${leed.real ? '' : ' <span class="tiny" style="opacity:.65">(demo)</span>'}</span>` : ''}</div>
-        ${visitTimingHTML(b)}
         <div class="row-flex" style="gap:12px">
           <div class="statbox"><div class="caps">Community</div><div class="val">${a.avg ? scoreHTML(a.avg.toFixed(1)).replace('class="score"', 'class="score" style="font-size:26px"') : '—'}</div><div class="tiny muted">${a.n} log${a.n === 1 ? '' : 's'}</div></div>
           <div class="statbox"><div class="caps">Your rating</div>
@@ -833,6 +832,7 @@
           <div class="small muted">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}${adder ? ` · pinned by @${esc(adder.handle)}` : ''}</div>
           <div class="chips">${links}</div>
         </div>
+        ${visitTimingHTML(b)}
         <div class="tabs">
           <button class="${bTab === 'critiques' ? 'on' : ''}" data-act="btab" data-k="critiques">Critiques · ${vs.length}</button>
           <button class="${bTab === 'photos' ? 'on' : ''}" data-act="btab" data-k="photos">Photos · ${photos.length}</button>
@@ -1163,6 +1163,7 @@
   const wmoLabel = c => c === 0 ? 'Clear' : c <= 2 ? 'Mostly clear' : c === 3 ? 'Cloudy' : c <= 48 ? 'Foggy' : c <= 67 || (c >= 80 && c <= 82) ? 'Rainy' : c <= 77 || c >= 85 ? 'Snowy' : c >= 95 ? 'Stormy' : 'Mixed';
   const weatherCache = {};
   const visitDaySel = {}; // buildingId -> selected forecast day index (0 = today)
+  const visitExpanded = {}; // buildingId -> is the weather card open
 
   function weatherKey(lat, lng) { return lat.toFixed(2) + ',' + lng.toFixed(2); }
 
@@ -1211,24 +1212,29 @@
     const pct = t => Math.max(0, Math.min(100, (t - dayStart) / (dayEnd - dayStart) * 100));
     const goldenPct = pct(sun.goldenHour.getTime());
 
-    let noteHTML;
+    let noteHTML, quickNote;
     const dayWeather = w && w.daily && `${wmoLabel(w.daily.weather_code[selIdx]).toLowerCase()} skies`;
     if (isToday) {
       const msToGolden = sun.goldenHour.getTime() - sun.now.getTime();
       const inGolden = sun.now >= sun.goldenHour && sun.now <= sun.sunset;
       if (inGolden) {
         noteHTML = `<b>Golden hour now</b> — the light won't be this good again till tomorrow.`;
+        quickNote = 'Golden hour now';
       } else if (msToGolden > 0 && msToGolden < 3 * 3600 * 1000) {
         const h = Math.floor(msToGolden / 3600000), m = Math.round((msToGolden % 3600000) / 60000);
         noteHTML = `<b>Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m</b>` + (w && w.current ? ` — ${wmoLabel(w.current.weather_code).toLowerCase()} skies.` : '.');
+        quickNote = `Golden hour in ${h > 0 ? h + 'h ' : ''}${m}m`;
       } else if (sun.now > sun.sunset || sun.now < sun.sunrise) {
         noteHTML = `Sun's down. Golden hour tomorrow around ${fmtTime(sun.goldenHour)}.`;
+        quickNote = `Golden hour tomorrow ~${fmtTime(sun.goldenHour)}`;
       } else {
         noteHTML = `Golden hour today at ${fmtTime(sun.goldenHour)}.`;
+        quickNote = `Golden hour at ${fmtTime(sun.goldenHour)}`;
       }
     } else {
       const dayLabel = selDate.toLocaleDateString([], { weekday: 'long' });
       noteHTML = `<b>Golden hour on ${dayLabel} at ${fmtTime(sun.goldenHour)}</b>` + (dayWeather ? ` — ${dayWeather} expected.` : '.');
+      quickNote = `Golden hour ${selDate.toLocaleDateString([], { weekday: 'short' })} at ${fmtTime(sun.goldenHour)}`;
     }
 
     const statusHTML = isToday
@@ -1256,17 +1262,21 @@
       }).join('')}</div>`;
     }
 
-    return `<div class="visit-card">
-      <div class="visit-top">
+    const expanded = !!visitExpanded[b.id];
+    return `<div class="visit-card${expanded ? ' open' : ''}">
+      <button class="visit-top" data-act="visitexpand" data-id="${b.id}">
         <div class="visit-status">${statusHTML}</div>
-      </div>
+        <div class="visit-quick muted">${quickNote}</div>
+        <span class="visit-chevron">${expanded ? '︿' : '﹀'}</span>
+      </button>
+      ${expanded ? `
       <div class="visit-bar">
         ${isToday ? `<div class="visit-bar-fill" style="width:${pct(sun.now.getTime())}%"></div><div class="visit-bar-marker" style="left:${pct(sun.now.getTime())}%" data-label="NOW"></div>` : ''}
         <div class="visit-bar-marker golden" style="left:${goldenPct}%" data-label="GOLDEN"></div>
       </div>
       <div class="visit-times"><span>${fmtTime(sun.sunrise)}</span><span>${fmtTime(sun.sunset)}</span></div>
       <div class="visit-note"><span class="dot-live"></span><span>${noteHTML}</span></div>
-      ${forecastHTML}
+      ${forecastHTML}` : ''}
     </div>`;
   }
 
@@ -1903,6 +1913,7 @@
       });
       document.getElementById('star-caption').textContent = STAR_WORDS[draft.stars];
     },
+    visitexpand(d) { visitExpanded[d.id] = !visitExpanded[d.id]; render(); },
     visitday(d) { visitDaySel[d.id] = +d.i; render(); },
     rmphoto(d) { draft.photos.splice(+d.i, 1); render(); },
     delvisit(d) {

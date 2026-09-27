@@ -205,9 +205,11 @@ button:active, .row:active { opacity: .6; }
 
 /* ---------- Best time to visit ---------- */
 .visit-card { border: 1px solid var(--line-2); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--fill); }
-.visit-top { display: flex; align-items: center; justify-content: space-between; }
-.visit-status { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.visit-top { display: flex; align-items: center; gap: 8px; width: 100%; background: none; text-align: left; }
+.visit-status { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; flex-shrink: 0; }
 .visit-icon { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: var(--paper); }
+.visit-quick { flex-grow: 1; font-size: 12px; text-align: right; }
+.visit-chevron { font-size: 12px; color: var(--text-2); flex-shrink: 0; width: 14px; text-align: center; }
 .visit-bar { position: relative; height: 10px; border-radius: 5px; background: var(--paper); overflow: hidden; }
 .visit-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: repeating-linear-gradient(45deg, var(--ink) 0, var(--ink) 1px, transparent 1px, transparent 6px); opacity: .12; }
 .visit-bar-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
