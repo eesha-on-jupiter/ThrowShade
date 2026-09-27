@@ -2687,6 +2687,8 @@
       const b = BY_ID[draft.bid];
       const existing = myVisit(draft.bid);
       const snapshot = JSON.stringify(state);
+      const beforeBadges = new Set(badgesFor(state.me).filter(x => x.earned).map(x => x.id));
+      const beforeLevel = levelFor(state.me).title;
       const fields = { stars: draft.stars, note: draft.note.trim(), likes: draft.likes.slice(), visitedOn: draft.date, createdAt: Date.now() };
       if (existing) Object.assign(existing, fields, { photos: draft.photos.slice() });
       else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: draft.photos.slice() }, fields));
@@ -2708,7 +2710,13 @@
       bTab = 'critiques';
       trail.push('/b/' + bid);
       location.replace('#/b/' + bid);
+      // Newly unlocked badges/level, celebrated one at a time after the log toast clears.
+      const newBadges = badgesFor(state.me).filter(x => x.earned && !beforeBadges.has(x.id));
+      const afterLevel = levelFor(state.me).title;
+      const celebrations = newBadges.map(x => `🏆 Unlocked: ${x.label}`);
+      if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
       setTimeout(() => { celebrate(); toast(msg); }, 30);
+      celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
   };
 
