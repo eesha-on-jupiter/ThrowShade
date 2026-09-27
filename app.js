@@ -16,13 +16,12 @@
   const DAY = 24 * HOUR;
   const INK = '#1f1f1f';
   const LINE = '#dcdad4';
-  // Theme: 'light' / 'dark' when picked on the profile, otherwise follow the system.
+  // Theme: opt-in only — light unless Dark mode was switched on in your profile; never follows the system.
   const THEME_KEY = 'throwingshade.theme';
-  const systemDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   function currentTheme() {
     let t = null;
     try { t = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked */ }
-    return t === 'light' || t === 'dark' ? t : (systemDark() ? 'dark' : 'light');
+    return t === 'dark' ? 'dark' : 'light';
   }
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
@@ -313,6 +312,15 @@
   }
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
+  // The best taste-match among people you follow, for an auto-suggested rival to compare with.
+  function bestRival(uid) {
+    let best = null;
+    followingIds(uid).forEach(fid => {
+      const c = compatibility(uid, fid);
+      if (c && (!best || c.pct > best.pct)) best = Object.assign({ uid: fid }, c);
+    });
+    return best;
   }
   // Achievements: computed fresh from existing data, nothing new to store.
   function badgesFor(uid) {
@@ -1006,6 +1014,7 @@
     }).join('');
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Want to Visit</div></div>
+      ${items.length >= 2 ? `<div class="pad" style="padding-bottom:12px"><button class="btn dashed" style="width:100%;height:48px" data-go="#/crawl/want">${icon('navigate', 'sm')}Plan a Crawl</button></div>` : ''}
       <div class="stack-6 pad">${rows || '<div class="empty">Nothing saved yet.<br>Tap Save on any place.</div>'}</div>
       <div class="spacer"></div>
     </div>${nav('lists')}`;
@@ -1058,6 +1067,8 @@
         canRemove ? `<button class="btn-sq thin" style="width:34px;height:34px" data-act="unlist" data-list="${l.id}" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>` : '');
     }).join('');
     const members = l.members.map(user).filter(Boolean);
+    const leaderboard = members.length > 1 ? members.map(u => ({ u, n: l.items.filter(it => it.addedBy === u.id).length }))
+      .sort((a, b) => b.n - a.n) : [];
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${esc(l.name)}</div>
         ${member ? `<button class="btn-sq thin" data-go="#/list/${l.id}/invite" aria-label="Invite people">${icon('users')}</button>` : ''}</div>
@@ -1066,6 +1077,13 @@
         <span class="small muted">${members.length} member${members.length === 1 ? '' : 's'} · ${l.ownerId === state.me ? 'you made this list' : 'made by @' + esc(user(l.ownerId).handle)}${l.public ? ' · public' : ''}</span>
         ${member ? '<span class="small" style="margin-left:auto">Invite</span>' : ''}
       </div>
+      ${l.items.length >= 2 ? `<div class="pad" style="padding-bottom:12px"><button class="btn dashed" style="width:100%;height:48px" data-go="#/crawl/${l.id}">${icon('navigate', 'sm')}Plan a Crawl</button></div>` : ''}
+      ${leaderboard.length ? `<div class="pad" style="padding-bottom:8px"><div class="section-title tight">Who's added the most</div>
+        <div class="stack-6">${leaderboard.map((x, i) => `<div class="row" data-go="#/u/${x.u.id}">
+          <span class="rank">${i + 1}</span>${avatar(x.u)}
+          <div class="grow">${x.u.id === state.me ? 'You' : '@' + esc(x.u.handle)}</div>
+          <b>${x.n}</b>
+        </div>`).join('')}</div></div>` : ''}
       <div class="stack-6 pad">${rows || '<div class="empty">No places yet.<br>Tap Save on any place to add it here.</div>'}</div>
       <div class="spacer"></div>
     </div>${nav('lists')}`;
@@ -1310,6 +1328,16 @@
           <div class="grow"><b>Friend Leaderboard</b><div class="sub">Who's logged the most this month</div></div>
           ${icon('chevron', 'sm')}
         </button>` : ''}
+        ${own ? (() => {
+          const rival = bestRival(uid);
+          if (!rival) return '';
+          const ru = user(rival.uid);
+          return `<button class="row" data-go="#/compare/${ru.id}">
+            ${avatar(ru)}
+            <div class="grow"><b>Compare with @${esc(ru.handle)}</b><div class="sub">${rival.pct}% taste match · your closest match</div></div>
+            ${icon('chevron', 'sm')}
+          </button>`;
+        })() : ''}
         ` : `
         <div><div class="section-title tight">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div class="been-wrap">
@@ -1382,6 +1410,51 @@
     else beenMap.fitBounds(places.map(b => [b.lat, b.lng]), { padding: [36, 36], maxZoom: 14 });
   }
 
+  // Architecture crawl: greedy nearest-neighbour ordering starting from the viewer's location.
+  function crawlOrder(items) {
+    const remaining = items.slice();
+    const order = [];
+    let cur = loc;
+    while (remaining.length) {
+      remaining.sort((a, b) => km(cur, a) - km(cur, b));
+      cur = remaining.shift();
+      order.push(cur);
+    }
+    return order;
+  }
+  function crawlItems(listId) {
+    if (listId === 'want') return state.want.filter(w => w.userId === state.me).map(w => BY_ID[w.buildingId]).filter(Boolean);
+    const l = state.lists.find(x => x.id === listId);
+    return l ? l.items.map(it => BY_ID[it.buildingId]).filter(Boolean) : [];
+  }
+  function viewCrawl(listId) {
+    const items = crawlItems(listId);
+    if (items.length < 2) {
+      return `<div class="screen with-nav">
+        <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Crawl Route</div></div>
+        <div class="pad"><div class="empty">Need at least 2 places on this list to plan a crawl.</div></div>
+      </div>${nav('lists')}`;
+    }
+    const order = crawlOrder(items);
+    let total = 0;
+    const legs = order.map((b, i) => { const prev = i === 0 ? loc : order[i - 1]; const d = km(prev, b); total += d; return { b, d }; });
+    const mins = Math.round(total / 5 * 60); // ~5 km/h walking pace
+    const waypoints = order.slice(0, -1).map(b => `${b.lat},${b.lng}`).join('|');
+    const dest = order[order.length - 1];
+    const gmaps = `https://www.google.com/maps/dir/?api=1&origin=${loc.lat},${loc.lng}&destination=${dest.lat},${dest.lng}${waypoints ? '&waypoints=' + encodeURIComponent(waypoints) : ''}&travelmode=walking`;
+    const rows = legs.map((leg, i) => `<button class="row" data-go="#/b/${leg.b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(leg.b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(leg.b.name)}</div><div class="sub">${fmtKm(leg.d)} from ${i === 0 ? 'you' : 'previous stop'}</div></div>
+      </button>`).join('');
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Crawl Route</div></div>
+      <div class="pad"><div class="banner" style="display:flex;justify-content:space-between;align-items:center"><b>${fmtKm(total)} total</b><span class="small muted">~${mins} min walk · ${order.length} stops</span></div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="pad"><a class="btn-primary" href="${gmaps}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Open full route in Maps</a></div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
   function compareStats(a, b) {
     const of = uid => visitsBy(uid).filter(v => BY_ID[v.buildingId]);
     const va = of(a), vb = of(b);
@@ -2651,6 +2724,7 @@
       case 'compare': html = viewCompare(seg[1]); break;
       case 'comments': html = viewComments(seg[1]); break;
       case 'discover-lists': html = viewDiscoverLists(); break;
+      case 'crawl': html = viewCrawl(seg[1]); break;
       case 'activity':
         html = viewActivity(); markActivitySeen(state.me); save(); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;

@@ -42,7 +42,7 @@
   color-scheme: light;
 }
 
-/* ---------- Dark mode: follows the system unless the profile toggle picked one ---------- */
+/* ---------- Dark mode: opt-in from the switch on your profile, never automatic ---------- */
 :root[data-theme="dark"] {
   --ink: #f2f2f0;
   --text-2: #a1a1a6;
@@ -63,28 +63,7 @@
   --cluster-halo: rgba(242, 242, 240, .18);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ink: #f2f2f0;
-    --text-2: #a1a1a6;
-    --text-3: #6e6e73;
-    --paper: #1c1c1e;
-    --bg: #121213;
-    --board: #0a0a0b;
-    --line: #2a2a2c;
-    --line-2: #3a3a3c;
-    --fill: #232325;
-    --ph: #2a2a2c;
-    --float: 0 4px 20px rgba(0, 0, 0, .5);
-    --grid: #2a2a2c;
-    --grid-bg: #1a1a1c;
-    --quote: #d1d1d6;
-    --glass: rgba(28, 28, 30, .9);
-    --tiles: grayscale(1) invert(1) contrast(.8) brightness(.95);
-    --cluster-halo: rgba(242, 242, 240, .18);
-    color-scheme: dark;
-  }
-}
+
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
