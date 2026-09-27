@@ -419,6 +419,7 @@
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
     sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
+    flame: '<path d="M12 22a6 6 0 0 0 6-6c0-3-2-4.5-3-7-0.5 1.5-1.5 2.5-2.5 2.5C13 9 13.5 6 11 2c0 4-4 6-5.5 9.5A6.8 6.8 0 0 0 5 14a7 7 0 0 0 7 8z"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -649,7 +650,7 @@
         <div class="seg" style="margin:0 20px 10px">
           <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
           <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
-          <button class="${mapMode === 'heat' ? 'on' : ''}" data-act="mapmode" data-k="heat">🔥 Heat</button>
+          <button class="${mapMode === 'heat' ? 'on' : ''}" data-act="mapmode" data-k="heat">${icon('flame', 'sm')}Heat</button>
         </div>
         ${mapFiltersOpen ? `
           <div class="pills">${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}</div>
@@ -711,7 +712,7 @@
         <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
       </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1" style="display:flex;align-items:center;gap:8px">${icon('flame')}Trending</div></div>
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -847,7 +848,7 @@
     } else if (tab === 'guides') {
       const trend = trending(10);
       const trendShelf = trend.length ? `
-        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="section-title" style="margin-top:8px"><span style="display:inline-flex;align-items:center;gap:6px">${icon('flame', 'sm')} Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
           ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
           <div class="rail-name ellipsis">${esc(x.b.name)}</div>
