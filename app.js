@@ -626,12 +626,13 @@
   const locNote = () => loc.demo ? `from ${esc(loc.label)} (demo location)` : 'from your location';
 
   // ---------- Theme ----------
+  // Opt-in only: defaults to light and never follows the system, so the app doesn't change on its own.
   const THEME_KEY = 'ts.theme';
   function applyTheme(t) {
-    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     else document.documentElement.removeAttribute('data-theme');
   }
-  function getTheme() { try { return localStorage.getItem(THEME_KEY) || 'system'; } catch (e) { return 'system'; } }
+  function getTheme() { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; } }
   function setTheme(t) { try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* ignore */ } applyTheme(t); }
   applyTheme(getTheme());
 
@@ -1344,7 +1345,7 @@
           </div></div>
         <div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div>
         `}
-        ${own ? `<button class="btn ghost" style="width:100%;height:44px" data-act="cycletheme">${icon('theme', 'sm')}Theme: ${getTheme() === 'system' ? 'System' : getTheme() === 'dark' ? 'Dark' : 'Light'}</button>` : ''}
+        ${own ? `<button class="btn ghost" style="width:100%;height:44px" data-act="cycletheme">${icon('theme', 'sm')}Theme: ${getTheme() === 'dark' ? 'Dark' : 'Light'}</button>` : ''}
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
@@ -2776,7 +2777,7 @@
     },
     login(d) { pickedPhoto = undefined; state.me = d.id; save(); Sound.success(); go('#/feed'); toast('Signed in as @' + me().handle); },
     switch() { state.me = null; save(); go('#/signin'); },
-    cycletheme() { setTheme({ system: 'light', light: 'dark', dark: 'system' }[getTheme()]); render(); },
+    cycletheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); render(); },
     reset() {
       if (!resetArmed) { resetArmed = true; render(); return; }
       resetArmed = false;
