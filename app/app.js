@@ -311,6 +311,32 @@
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
   }
+  // Achievements: computed fresh from existing data, nothing new to store.
+  function badgesFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]);
+    const cities = new Set(vs.map(v => BY_ID[v.buildingId].city).filter(Boolean)).size;
+    const countries = new Set(vs.map(v => BY_ID[v.buildingId].country).filter(Boolean)).size;
+    const photoLogs = vs.filter(v => v.photos && v.photos.length).length;
+    const noteLogs = vs.filter(v => v.note && v.note.trim()).length;
+    const lowRatings = vs.filter(v => v.stars <= 2).length;
+    const avg = vs.length ? vs.reduce((s, v) => s + v.stars, 0) / vs.length : 0;
+    const added = state.places.filter(p => p.addedBy === uid).length;
+    const starIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path d="${STAR_PATH}" fill="currentColor"/></svg>`;
+    return [
+      { id: 'first', label: 'First Log', icon: icon('check'), desc: 'Log your first place.', earned: vs.length >= 1 },
+      { id: 'regular', label: 'Regular Critic', icon: icon('edit'), desc: 'Log 10 places.', earned: vs.length >= 10 },
+      { id: 'veteran', label: 'Veteran Critic', icon: icon('layers'), desc: 'Log 25 places.', earned: vs.length >= 25 },
+      { id: 'jetsetter', label: 'Jetsetter', icon: icon('navigate'), desc: 'Log places in 5 different cities.', earned: cities >= 5 },
+      { id: 'globe', label: 'World Traveler', icon: icon('pin'), desc: 'Log places in 3 different countries.', earned: countries >= 3 },
+      { id: 'photog', label: 'Photographer', icon: icon('camera'), desc: 'Add photos to 5 logs.', earned: photoLogs >= 5 },
+      { id: 'wordsmith', label: 'Wordsmith', icon: icon('feed'), desc: 'Write notes on 10 logs.', earned: noteLogs >= 10 },
+      { id: 'shade', label: 'Shade Thrower', icon: icon('x'), desc: 'Rate 5 places 2★ or below.', earned: lowRatings >= 5 },
+      { id: 'superfan', label: 'Superfan', icon: starIcon, desc: 'Average 4.5★+ across 5 logs.', earned: vs.length >= 5 && avg >= 4.5 },
+      { id: 'butterfly', label: 'Social Butterfly', icon: icon('users'), desc: 'Follow 10 people.', earned: followingIds(uid).size >= 10 },
+      { id: 'influencer', label: 'Influencer', icon: icon('user'), desc: 'Get 15 followers.', earned: followerCount(uid) >= 15 },
+      { id: 'trailblazer', label: 'Trailblazer', icon: icon('building'), desc: 'Add a place to the map yourself.', earned: added >= 1 },
+    ];
+  }
   function guideBuildings(dim, key) {
     if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
     if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
@@ -1133,6 +1159,16 @@
         </div></div>` : '';
       })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        ${(() => {
+          const badges = badgesFor(uid);
+          const earned = badges.filter(x => x.earned).length;
+          return `<div><div class="section-title">Badges<span class="small muted" style="font-weight:400">${earned} of ${badges.length}</span></div>
+            <div class="badge-grid">${badges.map(x => `<div class="badge-tile ${x.earned ? 'on' : 'locked'}" title="${esc(x.desc)}">
+              <div class="badge-icon">${x.icon}</div>
+              <div class="badge-label">${esc(x.label)}</div>
+            </div>`).join('')}</div>
+          </div>`;
+        })()}
         ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
           <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
