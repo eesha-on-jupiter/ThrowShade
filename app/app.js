@@ -533,7 +533,7 @@
   // ---------- UI state ----------
   const root = document.getElementById('app');
   let beenMap = null, beenSel = null, beenUid = null, beenHeat = false, inviteSel = new Set();
-  let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
+  let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
   let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
@@ -1741,7 +1741,8 @@
   }
   function initMap() {
     const items = mapBuildings();
-    if (!items.find(x => x.b.id === mapSel)) mapSel = items.length ? nearest(items.map(x => x.b))[0].b.id : null;
+    // No default selection — the card only appears once a specific pin is tapped, not "whatever's nearest".
+    if (!items.find(x => x.b.id === mapSel)) mapSel = null;
     renderMapCard();
     if (!window.L) {
       document.getElementById('map').innerHTML = '<div class="map-fallback">Map tiles need an internet connection. Pins and the building card still work from the list views.</div>';
@@ -1765,11 +1766,14 @@
     });
     if (clusterGroup) map.addLayer(clusterGroup);
     if (mapHeat && window.L.heatLayer) {
-      const fids = followingIds(state.me);
-      // Snapchat-style glow: everyone's logs light up a spot, friends' logs light it up brighter.
-      const points = items.flatMap(({ b }) => visitsFor(b.id).map(v => [b.lat, b.lng, fids.has(v.userId) || v.userId === state.me ? 1.6 : 1]));
+      // Snapchat-style glow, but the temperature is the place's rating, not just how many people logged it —
+      // a single 5-star pilgrimage spot should glow hotter than a crowd of 2-star logs elsewhere.
+      const points = items.map(({ b }) => {
+        const a = avgFor(b.id);
+        return a.avg ? [b.lat, b.lng, a.avg / 5] : null;
+      }).filter(Boolean);
       heatLayer = window.L.heatLayer(points, {
-        radius: 34, blur: 28, maxZoom: 17, minOpacity: .35,
+        radius: 34, blur: 28, maxZoom: 17, minOpacity: .25, max: 1,
         gradient: { 0.2: '#ffd60a', 0.45: '#ff9f1c', 0.7: '#ff4d6d', 1: '#c1121f' },
       }).addTo(map);
     }
@@ -2466,8 +2470,7 @@
     btab(d) { bTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
-    mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
-    mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
+    mapkind(d) { mapKind = d.k; mapFiltersOpen = false; mapSel = null; render(); },
     mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapFiltersOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
     mapmode(d) { mapMode = d.k; render(); },
