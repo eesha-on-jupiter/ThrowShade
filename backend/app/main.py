@@ -351,7 +351,7 @@ def list_lists(user_id: str):
     conn = get_connection()
     try:
         rows = conn.execute(
-            """SELECT l.* FROM lists l
+            """SELECT DISTINCT l.* FROM lists l
                LEFT JOIN list_members m ON m.list_id = l.id
                WHERE l.owner_id = ? OR m.user_id = ?""",
             (user_id, user_id),

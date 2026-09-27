@@ -16,6 +16,69 @@ SEED_PATH = Path(__file__).resolve().parent / "seed_data.json"
 # for design mockups and aren't wanted in the backend.
 KEEP_USER_IDS = {"u-eesha", "u-shandon", "u-achyuth", "u-yenhsing"}
 
+# Presentation content: real ratings for the team, so a fresh clone shows the
+# same populated feed/map/profiles as this machine's demo run rather than an
+# empty backend. hours_ago spreads them out so the feed has a real order.
+DEMO_VISITS = [
+    ("u-eesha", "salk", 5, "The light in that courtyard is unreal at golden hour.", ["Light", "Material", "Context"], 6),
+    ("u-eesha", "therme-vals", 5, "Stone, steam, silence. Rebooked immediately.", ["Material", "Interior", "Vibes"], 30),
+    ("u-eesha", "kimbell", 4, "Those cycloid vaults do something to the light.", ["Light", "Space"], 54),
+    ("u-eesha", "pompidou", 4, "Chaotic outside, honest inside.", ["Structure", "Facade"], 80),
+    ("u-shandon", "lloyds", 5, "The best plumbing diagram ever built.", ["Engineering", "Facade", "Detail"], 4),
+    ("u-shandon", "hsbc-hk", 5, "Foster's kit of parts, executed perfectly.", ["Structure", "Engineering"], 28),
+    ("u-shandon", "cctv", 4, "The cantilever is unreasonable and I respect it.", ["Structure", "Scale"], 52),
+    ("u-shandon", "habitat-67", 4, "Modular housing that actually shipped.", ["Structure", "Material"], 76),
+    ("u-achyuth", "chrysler", 5, "Hubcaps as gargoyles. Unbeatable.", ["Facade", "Detail", "Craft"], 3),
+    ("u-achyuth", "empire-state", 5, "Still the best-dressed building in Midtown.", ["Facade", "Scale"], 27),
+    ("u-achyuth", "grand-central", 4, "The ceiling alone is worth the trip.", ["Interior", "Craft"], 51),
+    ("u-achyuth", "flatiron", 4, "New York's first icon.", ["Facade", "Context"], 75),
+    ("u-yenhsing", "farnsworth", 5, "Mies distilled a house down to a single thought.", ["Design", "Material", "Space"], 5),
+    ("u-yenhsing", "barcelona-pavilion", 5, "Floating planes, still radical.", ["Design", "Space"], 29),
+    ("u-yenhsing", "glass-house", 4, "Beautiful, but where do you put your socks.", ["Design", "Context"], 53),
+    ("u-yenhsing", "villa-savoye", 4, "The five points, textbook and gorgeous.", ["Design", "Structure"], 77),
+]
+DEMO_WANT = [
+    ("u-eesha", "sagrada-familia"), ("u-eesha", "church-of-light"),
+    ("u-shandon", "heydar-aliyev"), ("u-shandon", "seattle-library"),
+    ("u-achyuth", "sagrada-familia"), ("u-achyuth", "villa-savoye"),
+    ("u-yenhsing", "therme-vals"), ("u-yenhsing", "unite"),
+]
+DEMO_LIST = {
+    "id": "l-nyc-crawl", "name": "NYC architecture crawl", "owner_id": "u-eesha",
+    "members": ["u-eesha", "u-shandon", "u-achyuth"],
+    "items": [("seagram", "u-eesha"), ("chrysler", "u-achyuth"), ("lever-house", "u-shandon")],
+}
+
+
+def seed_demo_content(conn, now) -> None:
+    for user_id, place_id, stars, note, likes, hours_ago in DEMO_VISITS:
+        created_at = (now - timedelta(hours=hours_ago)).isoformat()
+        conn.execute(
+            """INSERT OR IGNORE INTO visits
+               (id, user_id, place_id, stars, note, likes, photos, visited_on, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?)""",
+            (f"v-{user_id}-{place_id}", user_id, place_id, stars, note, json.dumps(likes), created_at, created_at),
+        )
+    for user_id, place_id in DEMO_WANT:
+        conn.execute(
+            "INSERT OR IGNORE INTO want_to_visit (user_id, place_id, created_at) VALUES (?, ?, ?)",
+            (user_id, place_id, now.isoformat()),
+        )
+    conn.execute(
+        "INSERT OR IGNORE INTO lists (id, name, owner_id, created_at) VALUES (?, ?, ?, ?)",
+        (DEMO_LIST["id"], DEMO_LIST["name"], DEMO_LIST["owner_id"], now.isoformat()),
+    )
+    for user_id in DEMO_LIST["members"]:
+        conn.execute(
+            "INSERT OR IGNORE INTO list_members (list_id, user_id) VALUES (?, ?)",
+            (DEMO_LIST["id"], user_id),
+        )
+    for place_id, added_by in DEMO_LIST["items"]:
+        conn.execute(
+            "INSERT OR IGNORE INTO list_items (list_id, place_id, added_by, created_at) VALUES (?, ?, ?, ?)",
+            (DEMO_LIST["id"], place_id, added_by, now.isoformat()),
+        )
+
 
 def load_seed() -> dict:
     with open(SEED_PATH, encoding="utf-8") as f:
@@ -119,6 +182,8 @@ def main() -> None:
                         "INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)",
                         (follower, followee),
                     )
+
+        seed_demo_content(conn, now)
 
         conn.commit()
         counts = {
