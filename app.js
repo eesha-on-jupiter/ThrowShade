@@ -733,7 +733,7 @@
     const b = queue[radioIdx];
     const a = avgFor(b.id);
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${icon('radio', 'sm')} Similar to ${esc(seed.name)}</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">Similar to ${esc(seed.name)}</div></div>
       <div class="pad stack">
         ${ph(b, { w: 900, cls: 'hero', style: 'height:220px;border-radius:16px', label: phLabel(b) })}
         <div><div class="h-building">${esc(b.name)}</div><div class="muted" style="margin-top:2px">${esc(makerLine(b))}</div></div>
@@ -747,7 +747,7 @@
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <button class="btn block" data-go="#/b/${b.id}">${icon('external', 'sm')}Open</button>
         </div>
-        <button class="btn-primary" data-act="radioskip">${icon('radio', 'sm')}Next similar place</button>
+        <button class="btn-primary" data-act="radioskip">Next similar place</button>
       </div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -1105,7 +1105,7 @@
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
-        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('radio', 'sm')}Similar Places</button>
+        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('layers', 'sm')}Similar Places</button>
         <div class="about">
           <div class="bold">About</div>
           ${b.blurb ? `<div class="quote">${esc(b.blurb)}</div>` : b.enriching ? '<div class="muted small">Looking up Wikipedia…</div>' : ''}
