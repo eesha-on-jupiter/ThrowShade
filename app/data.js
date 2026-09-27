@@ -91,6 +91,11 @@ window.TS_SEED_USERS = [
   { id: 'u-theo', handle: 'theo.b', name: 'Theo Brandt', bio: 'Concrete or nothing.', photo: 'avatars/avatar_26.png' },
   { id: 'u-priya', handle: 'priya.s', name: 'Priya Shah', bio: 'Structural engineer. I judge the joints.', photo: 'avatars/avatar_29.png' },
   { id: 'u-jonah', handle: 'jonah.w', name: 'Jonah Weiss', bio: 'Here for the postmodern pastels.', photo: 'avatars/avatar_24.png' },
+  // The throwShade team
+  { id: 'u-eesha', handle: 'eesha.j', name: 'Eesha Jain', bio: 'throwShade team' },
+  { id: 'u-shandon', handle: 'shandon.h', name: 'Shandon Herft', bio: 'throwShade team' },
+  { id: 'u-achyuth', handle: 'achyuth.p', name: 'Achyuth Prabhakar', bio: 'throwShade team' },
+  { id: 'u-yenhsing', handle: 'yenhsing.c', name: 'Yenhsing Cheng', bio: 'throwShade team' },
 ];
 
 // [userId, buildingId, stars, note, hoursAgo]
@@ -158,25 +163,25 @@ window.TS_SEED_LIKES = {
   'u-mara|kimbell': ['Light', 'Structure', 'Space'],
   'u-mara|wd-Q753180': ['Structure', 'Space', 'Design'],
   'u-mara|wd-Q929965': ['Design', 'Landscape', 'Detail'],
-  'u-mara|wd-Q589099': ['Material', 'Concept', 'Scale'],
-  'u-mara|wd-Q5095736': ['Concept', 'Scale'],
+  'u-mara|wd-Q589099': ['Material', 'Vibes', 'Scale'],
+  'u-mara|wd-Q5095736': ['Vibes', 'Scale'],
   'u-mara|vessel': [],
-  'u-theo|barbican': ['Landscape', 'Material', 'Atmosphere'],
+  'u-theo|barbican': ['Landscape', 'Material', 'Vibes'],
   'u-theo|wd-Q653584': ['Structure', 'Material', 'Design'],
-  'u-theo|wd-Q3161356': ['Interior', 'Light', 'Atmosphere'],
+  'u-theo|wd-Q3161356': ['Interior', 'Light', 'Vibes'],
   'u-theo|wd-Q2002163': ['Structure', 'Material', 'Views'],
-  'u-theo|wd-Q3180096': ['Structure', 'Design', 'Atmosphere'],
+  'u-theo|wd-Q3180096': ['Structure', 'Design', 'Vibes'],
   'u-priya|pompidou': ['Structure', 'Engineering', 'Facade'],
   'u-priya|lloyds': ['Engineering', 'Detail', 'Facade'],
   'u-priya|wd-Q217727': ['Structure', 'Engineering', 'Facade'],
   'u-priya|wd-Q29294': ['Engineering', 'Scale', 'Views'],
-  'u-priya|wd-Q622895': ['Facade', 'Structure', 'Concept'],
+  'u-priya|wd-Q622895': ['Facade', 'Structure', 'Vibes'],
   'u-priya|wd-Q1928112': ['Engineering', 'Structure', 'Detail'],
   'u-jonah|wd-Q1925179': ['Facade', 'Detail', 'Craft'],
   'u-jonah|wd-Q3441853': ['Interior', 'Light', 'Detail'],
   'u-jonah|wd-Q2143136': ['Facade', 'Craft'],
-  'u-jonah|wd-Q3005469': ['Concept', 'Atmosphere', 'Context'],
-  'u-jonah|att-building': ['Facade', 'Concept', 'Detail'],
+  'u-jonah|wd-Q3005469': ['Vibes', 'Context'],
+  'u-jonah|att-building': ['Facade', 'Vibes', 'Detail'],
 };
 
 // Shared lists. items: [buildingId, addedBy]. invitesNewUsers: new sign-ups are added as members (demo).
@@ -190,6 +195,10 @@ window.TS_SEED_LISTS = [
     items: [['wd-Q1928112', 'u-priya'], ['wd-Q2002163', 'u-jonah'], ['wd-Q5127391', 'u-priya'], ['wd-Q7026554', 'u-priya']],
   },
 ];
+
+// Sustainability certifications, hand-checked against the certifying body (USGBC has no public API), keyed by
+// building id: e.g. 'wd-Q123': ['LEED Gold']. The `leed` field on a hand-curated building above works too.
+window.TS_CERTS = {};
 
 // [userId, buildingId]
 window.TS_SEED_WANT = [

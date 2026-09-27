@@ -29,7 +29,7 @@ The recorded demo shows this flow end to end:
 
 | Topic | Decision |
 | --- | --- |
-| Rating | 1–5 whole stars per log, plus optional "what stood out" chips (Design, Material, Structure, Facade, Light, Space, Interior, Detail, Craft, Context, Landscape, Views, Scale, Concept, Engineering, Atmosphere, Sustainability). No ranking. |
+| Rating | 1–5 whole stars per log, plus optional "what stood out" chips (Design, Material, Structure, Facade, Light, Space, Interior, Detail, Craft, Context, Landscape, Views, Scale, Vibes, Engineering, Sustainability). No ranking. |
 | Feed | Shows exactly what the person posted: stars, their critique, the chips they picked, and their own photos (0–4). No stock images. |
 | Place types | Buildings, bridges, art (sculpture, murals, installations) and spots (parks, squares, fountains, piers). |
 | Profiles | All profiles and logs are public. No private profiles, no follow approval, no private notes. |
@@ -51,9 +51,9 @@ Five bottom tabs, with the mockups' square icons and a black centre "+".
 
 | Tab | Route | Purpose |
 | --- | --- | --- |
-| Home | `#/feed` | Feed, with the wordmark and a search button |
+| Home | `#/feed` | Feed, with the wordmark |
 | Lists | `#/lists` | Want to Visit and your custom (shared) lists |
-| + | `#/log` | Log flow (bottom sheet) |
+| Search (centre) | `#/find` | Two tabs, each searched on its own: **Architecture** (places, architects, cities; + on a result rates it) and **Users** (all users, with Follow) |
 | Map | `#/map` | Map of places with type and status filters; drop a pin to add a place |
 | You | `#/me` | Your profile |
 
@@ -113,6 +113,16 @@ python tools/fetch_wikidata.py --global 450 --local 400 --radius 20 --city Chica
 ```
 
 **Stand-in photos for seeded posts (`tools/fetch_seed_photos.py`).** For every place a seeded critic posted about, pulls up to 4 photos from the place's Wikimedia Commons category (Wikidata P373) into `app/seed-photos.js`. Seeded posts show 0–4 of them (two critics posting the same place get different shots), each with a photographer/licence credit under the photos. Photos people upload themselves are never replaced.
+
+**Facts (`tools/fetch_facts.py` → `app/facts.js`).** Shown as small icons under a place's name (leaf = sustainability certification, columns = landmark status, medal = awards / Pritzker-winning architect, wheelchair = step-free, ticket = free or paid entry, clock = hours) and listed with sources in About under "Recognition & access".
+
+| Fact | Source |
+| --- | --- |
+| Landmark status (National Register, National Historic Landmark, Chicago Landmark, UNESCO …) | Wikidata P1435 |
+| Awards | Wikidata P166 on the building |
+| Pritzker Prize architect (with year) | Wikidata P166 = Q133160 on the architect |
+| Step-free access, entry fee, opening hours, website | OpenStreetMap tags on the element with the same Wikidata id |
+| Sustainability certifications (LEED, WELL, Passive House, BREEAM …) | Hand-checked only (`TS_CERTS` / `leed` in `app/data.js`); no made-up ratings |
 
 **Drop a pin (runtime).**
 1. Overpass API: buildings within 25 m of the pin, named buildings within 90 m, plus artworks, bridges, parks, squares, fountains, piers and attractions nearby; each result is tagged building / bridge / art / spot. Two public servers, 12 s timeout each.
