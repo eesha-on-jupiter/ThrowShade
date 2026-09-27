@@ -1177,14 +1177,6 @@
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
         ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
       </div>
-      <div class="pad" style="padding-top:0;padding-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        ${(() => {
-          const lvl = levelFor(uid);
-          const pct = lvl.next ? Math.round((lvl.xp - lvl.floor) / (lvl.next[0] - lvl.floor) * 100) : 100;
-          return `<span class="chip">${esc(lvl.title)}</span><div class="bar" style="flex:1;min-width:60px"><div style="width:${pct}%"></div></div><span class="tiny muted">${lvl.next ? `${lvl.next[0] - lvl.xp} XP to ${esc(lvl.next[1])}` : 'Max level'}</span>`;
-        })()}
-        ${streakWeeks(uid) >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streakWeeks(uid)}-week streak</span>` : ''}
-      </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
@@ -1209,6 +1201,15 @@
       </div>
       <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
         ${pTab === 'stats' ? `
+        ${(() => {
+          const lvl = levelFor(uid), streak = streakWeeks(uid);
+          const pct = lvl.next ? Math.round((lvl.xp - lvl.floor) / (lvl.next[0] - lvl.floor) * 100) : 100;
+          return `<div class="level-card">
+            <div class="row-flex" style="align-items:center"><b class="grow" style="font-size:17px">${esc(lvl.title)}</b>${streak >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streak}-week streak</span>` : ''}</div>
+            <div class="bar"><div style="width:${pct}%"></div></div>
+            <div class="small muted">${lvl.xp} XP${lvl.next ? ` · ${lvl.next[0] - lvl.xp} XP to ${esc(lvl.next[1])}` : ' · Max level'}</div>
+          </div>`;
+        })()}
         ${(() => {
           const badges = badgesFor(uid);
           const earned = badges.filter(x => x.earned).length;
