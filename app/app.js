@@ -411,7 +411,7 @@
   // ---------- UI state ----------
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
-  let mapKind = 'all', mapFilter = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
+  let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
   let findTab = 'buildings', findQ = '';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -482,7 +482,7 @@
         <div class="map-filters">
           <div class="pills" style="padding:0 0 10px">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>
           <div class="caps" style="margin-bottom:6px">Styles</div>
-          <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
+          <div class="legend-items stack-6" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<button class="legend-row${mapStyle === s ? ' on' : ''}" data-act="mapstyle" data-k="${s}"><span class="dot" style="background:${c}"></span> ${s}</button>`).join('')}
             <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
             <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
         </div>` : ''}
@@ -1069,6 +1069,7 @@
     if (mapFilter === 'want') list = list.filter(b => want.has(b.id));
     if (mapFilter === 'friends') list = list.filter(b => friends.has(b.id));
     if (mapKind !== 'all') list = list.filter(b => kindOf(b) === mapKind);
+    if (mapStyle !== 'all') list = list.filter(b => b.style === mapStyle);
     return list.map(b => ({ b, kind: mapFilter === 'friends' && kind(b) === 'other' ? 'been' : kind(b) }));
   }
   function pinIcon(b, kind) {
@@ -1815,6 +1816,7 @@
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
     mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
     mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
+    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
     locate() {
       requestLocation(ok => {

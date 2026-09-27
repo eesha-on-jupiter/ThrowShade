@@ -330,6 +330,8 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .leaflet-control-zoom { display: none; }
 .map-filters { margin: 0 20px 12px; font-size: 11px; background: var(--fill); border-radius: 12px; padding: 12px; }
 .map-filters .legend-items { display: flex; flex-direction: column; }
+.legend-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin: 0 -6px; border-radius: 8px; text-align: left; background: none; font-size: inherit; color: inherit; }
+.legend-row.on { background: var(--ink); color: var(--paper); font-weight: 600; }
 .map-locate, .map-pinbtn, .map-heatbtn { position: absolute; right: 12px; z-index: 5; background: var(--paper); box-shadow: var(--float); }
 .map-heatbtn { top: 12px; }
 .map-locate { top: 60px; }
