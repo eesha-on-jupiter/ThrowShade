@@ -141,6 +141,24 @@
       .sort((x, y) => y.n - x.n || (avgFor(y.b.id).avg || 0) - (avgFor(x.b.id).avg || 0))
       .slice(0, limit || 10);
   }
+  // Radio: a Spotify-radio-style queue of places similar to one seed — same architect/style/kind/city/era win.
+  let radioSeedId = null, radioIdx = 0;
+  function radioQueue(seedId) {
+    const seed = BY_ID[seedId];
+    if (!seed) return [];
+    const distMap = new Map(nearest(BUILDINGS).map(x => [x.b.id, x.d]));
+    return BUILDINGS.filter(b => b.id !== seedId).map(b => {
+      let score = 0;
+      if (b.architect && b.architect === seed.architect) score += 6;
+      if (b.style && b.style === seed.style) score += 5;
+      if (b.city && b.city === seed.city) score += 3;
+      if (kindOf(b) === kindOf(seed)) score += 2;
+      if (b.year && seed.year && Math.abs(b.year - seed.year) <= 15) score += 2;
+      const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
+      score += Math.max(0, 1 - d / 200);
+      return { b, score };
+    }).filter(x => x.score > 0).sort((x, y) => y.score - x.score).slice(0, 30).map(x => x.b);
+  }
   // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
   function recsFor(uid, limit) {
     const visited = new Set(visitsBy(uid).map(v => v.buildingId));
@@ -349,6 +367,7 @@
     feed: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
+    radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -617,6 +636,39 @@
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
       <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewRadio(seedId) {
+    const seed = BY_ID[seedId];
+    if (!seed) return viewNotFound();
+    if (radioSeedId !== seedId) { radioSeedId = seedId; radioIdx = 0; }
+    const queue = radioQueue(seedId);
+    if (!queue.length) {
+      return `<div class="screen with-nav">
+        <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Radio</div></div>
+        <div class="pad"><div class="empty">Not enough similar places to start a radio from ${esc(seed.name)} yet.</div></div>
+      </div>${nav('')}`;
+    }
+    if (radioIdx >= queue.length) radioIdx = 0;
+    const b = queue[radioIdx];
+    const a = avgFor(b.id);
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${icon('radio', 'sm')} Radio from ${esc(seed.name)}</div></div>
+      <div class="pad stack">
+        ${ph(b, { w: 900, cls: 'hero', style: 'height:260px;border-radius:16px', label: phLabel(b) })}
+        <div><div class="h-building">${esc(b.name)}</div><div class="muted" style="margin-top:2px">${esc(makerLine(b))}</div></div>
+        <div class="row-flex" style="align-items:center;justify-content:space-between">
+          ${a.avg ? scoreHTML(a.avg.toFixed(1)) : `<span class="muted small">Not rated yet</span>`}
+          <span class="small muted">${radioIdx + 1} of ${queue.length}</span>
+        </div>
+        <div class="row-flex">
+          <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
+          <button class="btn block" data-go="#/b/${b.id}">${icon('external', 'sm')}Open</button>
+        </div>
+        <button class="btn-primary" data-act="radioskip">${icon('radio', 'sm')}Next up</button>
+      </div>
       <div class="spacer"></div>
     </div>${nav('')}`;
   }
@@ -968,6 +1020,7 @@
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
+        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('radio', 'sm')}Start Radio</button>
         <div class="about">
           <div class="bold">About</div>
           ${b.blurb ? `<div class="quote">${esc(b.blurb)}</div>` : b.enriching ? '<div class="muted small">Looking up Wikipedia…</div>' : ''}
@@ -1856,6 +1909,7 @@
       case 'top': html = viewTopRated(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
+      case 'radio': html = viewRadio(seg[1]); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
@@ -1970,6 +2024,7 @@
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
     },
+    radioskip() { radioIdx++; render(); },
     findtab(d) { findTab = d.k; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
