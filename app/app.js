@@ -1100,9 +1100,13 @@
     window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
+    // Zoomed out, pins overlap too much to tell apart — the first tap zooms in on that spot
+    // instead of opening the card, so it reads as "zoom into this cluster" not "pick this pin".
+    const ZOOM_SELECT = 15;
     items.forEach(({ b, kind }) => {
       const m = window.L.marker([b.lat, b.lng], { icon: pinIcon(b, kind) }).addTo(map);
       m.on('click', () => {
+        if (map.getZoom() < ZOOM_SELECT) { map.flyTo([b.lat, b.lng], ZOOM_SELECT, { duration: .5 }); return; }
         const prev = mapSel; mapSel = b.id;
         [prev, b.id].forEach(id => { const r = mapMarkers[id]; if (r) r.marker.setIcon(pinIcon(r.b, r.kind)); });
         renderMapCard();
