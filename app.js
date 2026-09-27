@@ -389,6 +389,9 @@
     back: '<path d="m15 18-6-6 6-6"/>',
     chevron: '<path d="m9 18 6-6-6-6"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1-1"/>',
+    more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
     navigate: '<path d="m3 11 19-9-9 19-2-8z"/>',
@@ -1105,6 +1108,10 @@
         </div></div>` : '';
       })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
+          <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
+          ${icon('chevron', 'sm')}</button>` : ''}
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
         <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
@@ -1176,6 +1183,340 @@
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
+  }
+
+  // ---------- Wrapped ----------
+  // A story-style recap of one critic's logs: tap right/left to move, slides auto-advance.
+  const WRAP_MS = 6000;
+  let wrapUid = null, wrapIdx = 0, wrapTimer = null;
+
+  function wrapStars(n) { return '★'.repeat(n) + '<span style="opacity:.35">' + '★'.repeat(5 - n) + '</span>'; }
+  function wrapPersona(avg) {
+    if (avg >= 4.5) return ['The Superfan', 'Every building is a pilgrimage.'];
+    if (avg >= 3.8) return ['The Romantic', 'Generous, with a clear eye.'];
+    if (avg >= 3) return ['The Fair Judge', 'Honest ratings, no favourites.'];
+    return ['The Shade Thrower', 'Few buildings survive the gaze.'];
+  }
+
+  function wrapTally(list) {
+    const m = {};
+    list.filter(Boolean).forEach(x => { m[x] = (m[x] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }
+
+  function wrapSlides(u) {
+    const own = u.id === state.me;
+    const first = esc(u.name.split(' ')[0]);
+    const who = own ? 'You' : first;
+    const vs = visitsBy(u.id).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const bs = vs.map(v => BY_ID[v.buildingId]);
+    const tally = wrapTally;
+    const year = new Date().getFullYear();
+    const intro = {
+      bg: INK,
+      html: `<div class="w-kicker">throwShade Wrapped ${year}</div>
+        <div>${avatar(u, 'lg').replace('data-go', 'data-x')}</div>
+        <div class="w-big">${own ? 'Your' : first + '’s'} year in shade</div>
+        <div class="w-sub">Every building ${own ? 'you' : first} walked into, rated and remembered. Tap to begin.</div>`,
+    };
+    if (!vs.length) {
+      return [intro, {
+        bg: '#1d6f8c',
+        html: `<div class="w-big">Nothing logged yet</div><div class="w-sub">${own ? 'Log a building and your' : first + ' hasn’t logged anything, so their'} Wrapped fills itself in.</div>
+          ${own ? '<div class="w-btns"><button class="w-btn" data-go="#/log">Log a building</button></div>' : ''}`,
+      }];
+    }
+
+    const slides = [intro];
+    const cities = new Set(bs.map(b => b.city).filter(Boolean)).size;
+    const countries = new Set(bs.map(b => b.country).filter(Boolean)).size;
+    slides.push({
+      bg: '#1d6f8c',
+      html: `<div class="w-kicker">${who} logged</div>
+        <div class="w-huge" data-count="${vs.length}">0</div>
+        <div class="w-big">building${vs.length === 1 ? '' : 's'}</div>
+        <div class="w-sub">across ${cities} cit${cities === 1 ? 'y' : 'ies'}${countries > 1 ? ` in ${countries} countries` : ''}.</div>`,
+    });
+
+    const topV = vs[0], topB = bs[0];
+    slides.push({
+      bg: '#111',
+      photo: ph(topB, { w: 900, go: false, cls: 'wrap-photo' }),
+      bottom: true,
+      html: `<div class="w-kicker">${own ? 'Your' : first + '’s'} #1</div>
+        <div class="w-big">${esc(topB.name)}</div>
+        <div class="w-sub">${esc(makerLine(topB))}</div>
+        <div class="w-stars">${wrapStars(topV.stars)}</div>
+        ${topV.note ? `<div class="w-quote">“${esc(topV.note)}”</div>` : ''}`,
+    });
+
+    if (vs.length > 1) {
+      slides.push({
+        bg: '#2f6b4f',
+        html: `<div class="w-kicker">Top buildings</div>
+          <div class="w-list">${vs.slice(0, 5).map((v, i) => `<div class="w-row"><span class="n">${i + 1}</span>${ph(BY_ID[v.buildingId], { w: 120, go: false })}
+            <div class="grow"><b>${esc(BY_ID[v.buildingId].name)}</b><span class="s">${esc(BY_ID[v.buildingId].city || '')} · ${v.stars}★</span></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const styles = tally(bs.map(b => b.style));
+    if (styles.length) {
+      const [style, n] = styles[0];
+      slides.push({
+        bg: STYLES[style] || '#7c6a58',
+        html: `<div class="w-kicker">Top style</div>
+          <div class="w-big">${esc(style)}</div>
+          <div class="w-sub">${n} of ${vs.length} logs · ${Math.round(n / vs.length * 100)}%</div>
+          <div class="w-list">${styles.slice(0, 4).map(([s, c]) => `<div><div class="w-bar-label"><span>${esc(s)}</span><span>${c}</span></div><div class="w-bar"><div style="width:${Math.round(c / n * 100)}%"></div></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const architects = tally(bs.map(b => b.architect));
+    if (architects.length && architects[0][1] > 1) {
+      const [name, n] = architects[0];
+      const works = bs.filter(b => b.architect === name).slice(0, 3);
+      slides.push({
+        bg: '#8a4fa0',
+        html: `<div class="w-kicker">Most-logged architect</div>
+          <div class="w-big">${esc(name)}</div>
+          <div class="w-sub">${n} buildings. ${who} keep${own ? '' : 's'} coming back.</div>
+          <div class="w-thumbs">${works.map(b => ph(b, { w: 200, go: false })).join('')}</div>`,
+      });
+    }
+
+    const looks = tally(vs.flatMap(v => v.likes));
+    if (looks.length) {
+      slides.push({
+        bg: '#c2410c',
+        html: `<div class="w-kicker">${who} notice${own ? '' : 's'} the</div>
+          <div class="w-huge" style="font-size:72px">${esc(looks[0][0])}</div>
+          <div class="w-sub">Tagged ${looks[0][1]} time${looks[0][1] === 1 ? '' : 's'}. Also on the list:</div>
+          <div class="w-chips">${looks.slice(1, 7).map(([l, c]) => `<span class="w-chip">${esc(l)} ${c}</span>`).join('')}</div>`,
+      });
+    }
+
+    const dated = bs.filter(b => b.year).sort((a, b) => a.year - b.year);
+    if (dated.length > 1 && dated[dated.length - 1].year - dated[0].year >= 10) {
+      const old = dated[0], young = dated[dated.length - 1];
+      slides.push({
+        bg: '#a68a1d',
+        html: `<div class="w-kicker">Time travel</div>
+          <div class="w-huge" data-count="${young.year - old.year}">0</div>
+          <div class="w-big">years of architecture</div>
+          <div class="w-list">
+            <div class="w-row">${ph(old, { w: 120, go: false })}<div class="grow"><span class="s">Oldest · ${old.year}</span><b>${esc(old.name)}</b></div></div>
+            <div class="w-row">${ph(young, { w: 120, go: false })}<div class="grow"><span class="s">Newest · ${young.year}</span><b>${esc(young.name)}</b></div></div>
+          </div>`,
+      });
+    }
+
+    const low = vs[vs.length - 1];
+    if (vs.length > 1 && low.stars <= 3) {
+      const lb = BY_ID[low.buildingId];
+      slides.push({
+        bg: '#b3364a',
+        photo: ph(lb, { w: 900, go: false, cls: 'wrap-photo' }),
+        bottom: true,
+        html: `<div class="w-kicker">Most shade thrown at</div>
+          <div class="w-big">${esc(lb.name)}</div>
+          <div class="w-stars">${wrapStars(low.stars)}</div>
+          ${low.note ? `<div class="w-quote">“${esc(low.note)}”</div>` : `<div class="w-sub">${STAR_WORDS[low.stars]}.</div>`}`,
+      });
+    }
+
+    const avg = vs.reduce((s, v) => s + v.stars, 0) / vs.length;
+    const [persona, line] = wrapPersona(avg);
+    slides.push({
+      bg: '#1c1c1e',
+      html: `<div class="w-kicker">Average rating</div>
+        <div class="w-huge"><span data-count="${avg.toFixed(1)}" data-dec="1">0</span><span style="font-size:.5em">★</span></div>
+        <div class="w-kicker" style="margin-top:12px">Critic type</div>
+        <div class="w-big">${persona}</div>
+        <div class="w-sub">${line}</div>`,
+    });
+
+    slides.push({
+      bg: STYLES[styles[0][0]] || INK,
+      last: true,
+      html: `<div class="w-card">
+          <div style="display:flex;align-items:center;gap:12px">${avatar(u, 'md').replace('data-go', 'data-x')}<div class="grow"><b>${esc(u.name)}</b><div class="small muted">throwShade Wrapped ${year}</div></div></div>
+          <div class="w-card-grid">
+            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div class="ellipsis"><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
+            <div><div class="caps">Top style</div><div><b>${esc(styles[0][0])}</b></div>
+              <div class="caps" style="margin-top:8px">Architect</div><div class="ellipsis"><b>${esc(architects[0][0])}</b></div></div>
+            <div><div class="caps">Logged</div><div class="w-card-num">${vs.length}</div></div>
+            <div><div class="caps">Critic type</div><div><b>${persona}</b></div></div>
+          </div>
+        </div>
+        <div class="w-btns"><button class="w-btn ghost" data-act="wrapreplay">Replay</button><button class="w-btn" data-act="wrapshare" data-id="${u.id}">Share</button></div>`,
+    });
+    return slides;
+  }
+
+  // ----- Wrapped share sheet -----
+  let wrapShare = null; // { uid, blob, url }
+  const SHARE_BRANDS = {
+    instagram: ['Instagram', 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)',
+      '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg>'],
+    facebook: ['Facebook', '#1877F2',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.5 22v-8h2.7l.4-3.2h-3.1V8.8c0-.9.3-1.6 1.6-1.6h1.7V4.4c-.3 0-1.3-.1-2.5-.1-2.5 0-4.1 1.5-4.1 4.2v2.3H7.5V14h2.7v8z"/></svg>'],
+    x: ['X', '#000',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M17.8 3h3.1l-6.8 7.8 8 10.2h-6.3l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.9 3h6.4l4.4 5.9zm-1.1 16.2h1.7L7.4 4.7H5.6z"/></svg>'],
+    threads: ['Threads', '#000',
+      '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M16.5 11.2c-.6-2.6-2.4-3.7-4.6-3.7-2.9 0-4.4 2-4.4 4.5 0 2.7 1.7 4.5 4.6 4.5 2.4 0 4.2-1.3 4.2-3.3 0-1.8-1.4-2.7-3.2-2.7-1.6 0-2.8.8-2.8 2 0 1 .9 1.7 2.1 1.7 2.8 0 3.4-2.9 3.2-5.6"/><path d="M19.5 7.5C18.2 4.5 15.5 3 12 3 6.8 3 4 6.8 4 12s2.8 9 8 9c4 0 6.6-2 7.6-5"/></svg>'],
+    whatsapp: ['WhatsApp', '#25D366',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2.5a9.4 9.4 0 0 0-8.1 14.2L2.6 21.4l4.8-1.3A9.4 9.4 0 1 0 12 2.5zm5.4 13.3c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.5-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.9s.7-2.1 1-2.4c.3-.3.6-.3.8-.3h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.6-.1l2 .9c.3.1.5.2.5.3.1.1.1.6-.1 1.2z"/></svg>'],
+    line: ['LINE', '#06C755',
+      '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.6 1.1-.5 6-3.5 8.2-6.1 1.2-1.3 1.8-2.8 1.8-4.8C22 6.6 17.5 3 12 3zM8.3 13.5H6.3a.5.5 0 0 1-.5-.5V9a.5.5 0 0 1 1 0v3.5h1.5a.5.5 0 0 1 0 1zm2 -.5a.5.5 0 0 1-1 0V9a.5.5 0 0 1 1 0zm4.8 0a.5.5 0 0 1-.9.3L12 10.5V13a.5.5 0 0 1-1 0V9a.5.5 0 0 1 .9-.3l2.2 2.8V9a.5.5 0 0 1 1 0zm3.2-2.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5V9c0-.3.2-.5.5-.5h2a.5.5 0 0 1 0 1h-1.5v1z"/></svg>'],
+  };
+
+  function wrapSummary(uid) {
+    const u = user(uid);
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const bs = vs.map(v => BY_ID[v.buildingId]);
+    const avg = vs.length ? vs.reduce((t, v) => t + v.stars, 0) / vs.length : 0;
+    const style = (wrapTally(bs.map(b => b.style))[0] || [''])[0];
+    return {
+      u, vs, bs, avg, style,
+      architect: (wrapTally(bs.map(b => b.architect))[0] || [''])[0],
+      persona: wrapPersona(avg)[0],
+      color: STYLES[style] || INK,
+      link: location.href.split('#')[0] + '#/wrapped/' + uid,
+      text: `${u.name}’s throwShade Wrapped: ${vs.length} buildings logged${bs[0] ? ', #1 is ' + bs[0].name : ''}.`,
+    };
+  }
+
+  // Story-sized (1080×1920) PNG of the summary card, drawn on a canvas so it can be saved or posted.
+  async function wrapImage(uid) {
+    const w = wrapSummary(uid);
+    const W = 1080, H = 1920, F = '"IBM Plex Sans", system-ui, sans-serif';
+    try { await Promise.all([document.fonts.load('700 40px "IBM Plex Sans"'), document.fonts.load('400 40px "IBM Plex Sans"')]); } catch (e) {}
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const fit = (t, max) => {
+      if (x.measureText(t).width <= max) return t;
+      while (t.length > 1 && x.measureText(t + '…').width > max) t = t.slice(0, -1);
+      return t + '…';
+    };
+    const round = (l, t, rw, rh, r) => { x.beginPath(); x.roundRect(l, t, rw, rh, r); };
+
+    x.fillStyle = w.color; x.fillRect(0, 0, W, H);
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.textAlign = 'center';
+    x.font = `700 38px ${F}`; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+
+    // Avatar
+    x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
+    if (w.u.photo) {
+      const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; });
+      if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
+    } else {
+      x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic';
+    }
+    x.restore();
+    x.fillStyle = '#fff'; x.font = `700 76px ${F}`; x.fillText(fit(w.u.name, 900), W / 2, 650);
+    x.fillStyle = 'rgba(255,255,255,.8)'; x.font = `400 40px ${F}`; x.fillText('@' + w.u.handle, W / 2, 712);
+
+    // Card
+    const L = 110, CW = W - 2 * L, T = 790, CH = 880;
+    x.fillStyle = '#fff'; round(L, T, CW, CH, 48); x.fill();
+    x.textAlign = 'left';
+    const caps = (t, l, top) => { x.fillStyle = '#a1a1a6'; x.font = `700 28px ${F}`; x.fillText(t.toUpperCase(), l, top); };
+    caps('Top buildings', L + 60, T + 90);
+    w.bs.slice(0, 5).forEach((b, i) => {
+      const y = T + 160 + i * 66;
+      x.fillStyle = INK; x.font = `700 44px ${F}`; x.fillText(String(i + 1), L + 60, y);
+      x.font = `400 42px ${F}`; x.fillText(fit(b.name, CW - 180), L + 120, y);
+    });
+    const gy = T + 540, col2 = L + CW / 2 + 10;
+    x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2);
+    caps('Logged', L + 60, gy);
+    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(String(w.vs.length), L + 60, gy + 100);
+    caps('Average', col2, gy);
+    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
+    caps('Top style', L + 60, gy + 190);
+    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.style, CW / 2 - 90), L + 60, gy + 245);
+    caps('Critic type', col2, gy + 190);
+    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.persona, CW / 2 - 70), col2, gy + 245);
+
+    x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = `700 56px ${F}`; x.fillText('throwShade', W / 2, 1800);
+    return new Promise(res => c.toBlob(res, 'image/png'));
+  }
+
+  async function openWrapShare(uid) {
+    const host = root.querySelector('.wrap');
+    if (!host || host.querySelector('.wrap-sheet')) return;
+    const bg = document.createElement('div');
+    bg.className = 'wrap-sheet-bg'; bg.dataset.act = 'shareclose';
+    const sheet = document.createElement('div');
+    sheet.className = 'wrap-sheet';
+    const opt = (act, label, face, style) => `<button class="share-opt" data-act="${act}"><span class="ic" style="${style || ''}">${face}</span>${label}</button>`;
+    sheet.innerHTML = `<div class="grab"></div>
+      <div class="wrap-sheet-preview"><div class="spin"></div></div>
+      <div class="share-row">
+        ${opt('sharedl', 'Download', icon('download'))}
+        ${opt('sharecopy', 'Copy link', icon('link'))}
+        ${Object.entries(SHARE_BRANDS).map(([k, [label, bgc, svg]]) => opt('shareto', label, svg, `background:${bgc}`).replace('data-act="shareto"', `data-act="shareto" data-to="${k}"`)).join('')}
+        ${opt('sharemore', 'More', icon('more'))}
+      </div>`;
+    host.append(bg, sheet);
+    if (wrapShare && wrapShare.uid !== uid) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
+    if (!wrapShare) {
+      const blob = await wrapImage(uid);
+      wrapShare = { uid, blob, url: URL.createObjectURL(blob) };
+    }
+    const pv = sheet.querySelector('.wrap-sheet-preview');
+    if (pv) pv.innerHTML = `<img src="${wrapShare.url}" alt="Wrapped share image">`;
+  }
+  function closeWrapShare() {
+    const host = root.querySelector('.wrap');
+    if (!host) return;
+    host.querySelectorAll('.wrap-sheet, .wrap-sheet-bg').forEach(el => el.remove());
+  }
+  function wrapDownload() {
+    if (!wrapShare) return false;
+    const a = document.createElement('a');
+    a.href = wrapShare.url; a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    return true;
+  }
+  function wrapFile() {
+    return wrapShare ? new File([wrapShare.blob], `throwshade-wrapped-${user(wrapShare.uid).handle}.png`, { type: 'image/png' }) : null;
+  }
+
+  function viewWrapped(uid) {
+    const u = user(uid);
+    if (!u) return viewNotFound();
+    if (wrapUid !== uid) { wrapUid = uid; wrapIdx = 0; }
+    const slides = wrapSlides(u);
+    wrapIdx = Math.max(0, Math.min(wrapIdx, slides.length - 1));
+    const s = slides[wrapIdx];
+    const last = wrapIdx === slides.length - 1;
+    const bars = slides.map((_, i) => `<div><span class="${i < wrapIdx || (i === wrapIdx && last) ? 'done' : i === wrapIdx ? 'run' : ''}"></span></div>`).join('');
+    return `<div class="screen fixed wrap" style="background:${s.bg}">
+      ${s.photo || ''}
+      <div class="wrap-bars">${bars}</div>
+      <button class="btn-sq wrap-close" data-act="wrapclose" aria-label="Close">${icon('x')}</button>
+      <button class="wrap-tap prev" data-act="wrapprev" aria-label="Previous"></button>
+      ${last ? '' : '<button class="wrap-tap next" data-act="wrapnext" aria-label="Next"></button>'}
+      <div class="wrap-body ${s.bottom ? 'bottom' : ''}" data-n="${slides.length}">${s.html}</div>
+    </div>`;
+  }
+
+  function startWrap() {
+    clearTimeout(wrapTimer);
+    const body = root.querySelector('.wrap-body');
+    if (!body) return;
+    root.querySelectorAll('[data-count]').forEach(el => {
+      const to = +el.dataset.count, dec = +(el.dataset.dec || 0), t0 = Date.now();
+      const tick = setInterval(() => {
+        const k = Math.min(1, (Date.now() - t0) / 1000);
+        el.textContent = (to * (1 - Math.pow(1 - k, 3))).toFixed(dec);
+        if (k >= 1 || !el.isConnected) clearInterval(tick);
+      }, 30);
+    });
+    if (wrapIdx < +body.dataset.n - 1) wrapTimer = setTimeout(() => { if (currentPath().startsWith('/wrapped')) actions.wrapnext(); }, WRAP_MS);
+    else if (body.querySelector('.w-card')) { Sound.success(); celebrate(); }
   }
 
   function viewEditProfile() {
@@ -1886,6 +2227,11 @@
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
     if (seg[0] !== 'log') { draft = null; delArmed = false; }
     if (seg[0] !== 'save' && seg[0] !== 'newlist') inviteSel = new Set();
+    clearTimeout(wrapTimer);
+    if (seg[0] !== 'wrapped') {
+      wrapUid = null;
+      if (wrapShare) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
+    }
 
     destroyMap();
     galleries = [];
@@ -1908,6 +2254,7 @@
       case 'followers': html = viewFollowList(seg[1], 'followers'); break;
       case 'following': html = viewFollowList(seg[1], 'following'); break;
       case 'editprofile': html = viewEditProfile(); break;
+      case 'wrapped': html = viewWrapped(seg[1] || state.me); after = startWrap; break;
       case 'log': html = seg[1] ? viewLogRate(seg[1]) : viewLogPick(); break;
       case 'pin': {
         const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(seg[1] || '');
@@ -2044,6 +2391,45 @@
     lbclose(d, el, e) { if (e.target.tagName !== 'IMG') closeViewer(); },
     lbprev() { stepViewer(-1); },
     lbnext() { stepViewer(1); },
+    wrapnext() { wrapIdx++; Sound.tap(); render(); },
+    wrapprev() { wrapIdx = Math.max(0, wrapIdx - 1); render(); },
+    wrapreplay() { wrapIdx = 0; render(); },
+    wrapclose() { back(); },
+    wrapshare(d) { openWrapShare(d.id); },
+    shareclose() { closeWrapShare(); },
+    sharedl() { if (wrapDownload()) toast('Image saved'); },
+    sharecopy() {
+      const w = wrapSummary(wrapUid);
+      const text = w.text + ' ' + w.link;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Link copied'), () => toast(text));
+      else toast(text);
+    },
+    shareto(d) {
+      const w = wrapSummary(wrapUid);
+      const u = encodeURIComponent(w.link), t = encodeURIComponent(w.text);
+      if (d.to === 'instagram') {
+        // No web intent for Instagram: hand the image to the phone's share sheet, else save it for posting.
+        const file = wrapFile();
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file] }).catch(() => {});
+        else if (wrapDownload()) toast('Image saved — post it to your Instagram story');
+        return;
+      }
+      const urls = {
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+        x: `https://twitter.com/intent/tweet?text=${t}&url=${u}`,
+        threads: `https://www.threads.net/intent/post?text=${t}%20${u}`,
+        whatsapp: `https://wa.me/?text=${t}%20${u}`,
+        line: `https://social-plugins.line.me/lineit/share?url=${u}&text=${t}`,
+      };
+      if (urls[d.to]) window.open(urls[d.to], '_blank', 'noopener');
+    },
+    sharemore() {
+      const w = wrapSummary(wrapUid), file = wrapFile();
+      const data = { title: 'throwShade Wrapped', text: w.text, url: w.link };
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) data.files = [file];
+      if (navigator.share) navigator.share(data).catch(() => {});
+      else actions.sharecopy();
+    },
     closeedit() { pickedPhoto = undefined; back(); },
     // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
     shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
