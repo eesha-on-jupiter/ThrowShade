@@ -201,39 +201,33 @@ button:active, .row:active { opacity: .6; }
 .stat-table > div { flex: 1; padding: 12px 4px; }
 .stat-table b { font-size: 18px; font-weight: 700; display: block; }
 
-/* ---------- Best time to visit (inside About, collapsed by default) ---------- */
-.visit-widget { background: var(--fill); border-radius: 12px; margin-top: 4px; padding: 12px; }
-.visit-summary { width: 100%; display: flex; align-items: center; gap: 10px; background: none; text-align: left; }
-.visit-icon-lg { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; background: var(--paper); }
-.visit-main { display: flex; flex-direction: column; line-height: 1.25; flex-shrink: 0; }
-.visit-temp { font-size: 16px; font-weight: 700; }
-.visit-cond { font-size: 11px; }
+/* ---------- Best time to visit ---------- */
+.visit-card { border: 1px solid var(--line-2); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--fill); }
+.visit-top { display: flex; align-items: center; gap: 8px; width: 100%; background: none; text-align: left; }
+.visit-status { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.visit-icon { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: var(--paper); }
 .visit-quick { flex-grow: 1; font-size: 12px; text-align: right; }
-.visit-chevron { font-size: 12px; color: var(--muted); flex-shrink: 0; width: 14px; text-align: center; }
-.visit-widget.open .visit-summary { margin-bottom: 14px; }
-
-.visit-daytabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
-.daytab { flex-shrink: 0; height: 32px; padding: 0 12px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line-2); border-radius: 16px; font-size: 12px; }
-.daytab.on { background: var(--ink); color: var(--paper); box-shadow: none; }
-
-.visit-scrub { position: relative; margin-bottom: 12px; }
-.visit-scrub-track { position: relative; height: 6px; border-radius: 3px; background: var(--paper); overflow: hidden; }
-.visit-scrub-zone { position: absolute; top: 0; bottom: 0; background: #c2410c; opacity: .35; }
-.visit-scrub-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
-.visit-slider {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin-top: -17px;
-  background: transparent; position: relative;
-}
-.visit-slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); cursor: pointer;
-}
-.visit-slider::-moz-range-thumb {
-  width: 18px; height: 18px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); cursor: pointer;
-}
-.visit-slider::-moz-range-track { background: transparent; }
-.visit-scrub-readout { display: flex; align-items: center; gap: 10px; }
-.visit-scrub-readout .visit-icon-lg { font-size: 18px; }
+.visit-chevron { font-size: 12px; color: var(--text-2); flex-shrink: 0; width: 14px; text-align: center; }
+.visit-bar { position: relative; height: 10px; border-radius: 5px; background: var(--paper); overflow: hidden; }
+.visit-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: repeating-linear-gradient(45deg, var(--ink) 0, var(--ink) 1px, transparent 1px, transparent 6px); opacity: .12; }
+.visit-bar-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.visit-bar-marker.golden { background: #c2410c; }
+.visit-bar-marker::after { content: attr(data-label); position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; white-space: nowrap; color: inherit; }
+.visit-times { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); }
+.visit-note { font-size: 12.5px; color: var(--ink); display: flex; align-items: flex-start; gap: 6px; }
+.visit-note .dot-live { width: 6px; height: 6px; border-radius: 50%; background: #7a8b2e; flex-shrink: 0; margin-top: 5px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.forecast-row { display: flex; gap: 8px; overflow-x: auto; }
+.forecast-day { flex: 1; min-width: 58px; border-radius: 10px; padding: 8px 6px; text-align: center; display: flex; flex-direction: column; gap: 4px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line-2); }
+.forecast-day.best { box-shadow: inset 0 0 0 2px var(--ink); background: var(--fill); }
+.forecast-day.sel { background: var(--ink); box-shadow: none; }
+.forecast-day.sel .d, .forecast-day.sel .t, .forecast-day.sel .g { color: var(--paper); }
+.forecast-day .d { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-2); }
+.forecast-day.best .d { color: var(--ink); }
+.forecast-day .icon { font-size: 16px; }
+.forecast-day .t { font-size: 11px; font-weight: 600; }
+.forecast-day .g { font-size: 9px; color: var(--text-2); }
+.badge-best { font-size: 8px; font-weight: 700; letter-spacing: .03em; background: var(--ink); color: var(--paper); border-radius: 3px; padding: 1px 4px; margin: 0 auto; }
 
 .banner { background: var(--fill); border-radius: 12px; padding: 12px 14px; }
 .bar { height: 6px; background: var(--fill); border-radius: 999px; flex-grow: 1; overflow: hidden; }
@@ -331,15 +325,16 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .leaflet-tile-pane { filter: grayscale(1) contrast(.75) brightness(1.16); opacity: .85; }
 .leaflet-control-attribution { font-size: 9px !important; background: rgba(255,255,255,.75) !important; }
 .leaflet-control-zoom { display: none; }
-.map-legend { margin: 0 20px 10px; font-size: 11px; }
-.map-legend .legend-toggle { font-weight: 500; font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
-.map-legend .legend-toggle svg:last-child { margin-left: -2px; }
-.map-legend .legend-items { margin-top: 8px; background: var(--fill); border-radius: 12px; padding: 10px 12px; }
-.map-legend .legend-items.closed { display: none; }
-.map-locate, .map-pinbtn { position: absolute; right: 12px; z-index: 5; background: var(--paper); box-shadow: var(--float); }
-.map-locate { top: 12px; }
-.map-pinbtn { top: 60px; }
+.map-filters { margin: 0 20px 12px; font-size: 11px; background: var(--fill); border-radius: 12px; padding: 12px; }
+.map-filters .legend-items { display: flex; flex-direction: column; }
+.legend-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin: 0 -6px; border-radius: 8px; text-align: left; background: none; font-size: inherit; color: inherit; }
+.legend-row.on { background: var(--ink); color: var(--paper); font-weight: 600; }
+.map-locate, .map-pinbtn, .map-heatbtn { position: absolute; right: 12px; z-index: 5; background: var(--paper); box-shadow: var(--float); }
+.map-heatbtn { top: 12px; }
+.map-locate { top: 60px; }
+.map-pinbtn { top: 108px; }
 .map-pinbtn.on { background: var(--ink); color: var(--paper); }
+.map-heatbtn.on { background: #ff4d6d; color: #fff; border-color: #ff4d6d; }
 .map-hint {
   position: absolute; left: 12px; top: 60px; z-index: 6;
   background: var(--ink); color: var(--paper); padding: 7px 12px; border-radius: 999px;
@@ -357,6 +352,7 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .pin.want { background: var(--paper); border: 3px solid var(--c); }
 .pin.other { width: 12px; height: 12px; opacity: .55; margin: 4px; border-width: 1.5px; }
 .pin.sel { width: 28px; height: 28px; border: 3px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink), 0 3px 10px rgba(0,0,0,.25); margin: -4px; opacity: 1; }
+.pin.dim:not(.sel) { opacity: .45; box-shadow: none; }
 .pin.me { background: #3478f6; width: 14px; height: 14px; border: 3px solid var(--paper); box-shadow: 0 0 0 5px rgba(52,120,246,.15); margin: 3px; }
 
 /* ---------- Pin sheet ---------- */
