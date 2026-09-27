@@ -38,7 +38,7 @@
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
   // Facts shown as small icons on a place and explained in About: certifications (hand-checked, app/data.js),
-  // landmark status / awards / Pritzker architects (Wikidata) and access (OpenStreetMap) — see tools/fetch_facts.py.
+  // landmark status / awards / Pritzker architects (Wikidata) — see tools/fetch_facts.py.
   const HERITAGE_NAMES = {
     'National Register of Historic Places listed place': 'National Register of Historic Places',
     'National Register of Historic Places contributing property': 'National Register (contributing property)',
@@ -54,38 +54,27 @@
       heritage: (f.heritage || []).map(h => HERITAGE_NAMES[h] || h),
       awards: f.awards || [],
       pritzker: f.pritzker || [],
-      access: f.access || {},
     };
   }
-  // One small icon per kind of fact; the title explains it, a tap scrolls to the details in About.
+  // One small icon per kind of recognition; the title explains it, a tap scrolls to the details in About.
   function factIcons(b, size) {
-    const f = factsFor(b), a = f.access, out = [];
+    const f = factsFor(b), out = [];
     const add = (name, title) => out.push(`<span class="fact-ic ${size || ''}" title="${esc(title)}" aria-label="${esc(title)}">${icon(name, 'sm')}</span>`);
     if (f.certs.length) add('leaf', f.certs.join(' · '));
     if (f.heritage.length) add('landmark', f.heritage.join(' · '));
     if (f.awards.length || f.pritzker.length) add('award', [...f.awards, ...f.pritzker.map(p => `Pritzker Prize architect: ${p.name}`)].join(' · '));
-    if (a.wheelchair === 'yes' || a.wheelchair === 'limited') add('accessible', a.wheelchair === 'yes' ? 'Step-free access' : 'Limited step-free access');
-    if (a.fee === 'no') add('ticket', 'Free entry');
-    else if (a.fee === 'yes') add('ticket', 'Entry fee');
-    if (a.opening_hours) add('clock', 'Hours: ' + a.opening_hours);
     return out.join('');
   }
   function factsHTML(b) {
-    const f = factsFor(b), a = f.access, rows = [];
+    const f = factsFor(b), rows = [];
     const row = (ic, label, value) => rows.push(`<div class="fact-row">${icon(ic, 'sm')}<div><div class="caps">${label}</div><div class="small">${value}</div></div></div>`);
     if (f.certs.length) row('leaf', 'Sustainability', esc(f.certs.join(' · ')));
     if (f.heritage.length) row('landmark', 'Landmark status', esc(f.heritage.join(' · ')));
     if (f.awards.length) row('award', 'Awards', esc(f.awards.join(' · ')));
     if (f.pritzker.length) row('award', 'Pritzker Prize architect', esc(f.pritzker.map(p => p.name + (p.year ? ` (${p.year})` : '')).join(' · ')));
-    const access = [
-      a.wheelchair === 'yes' ? 'Step-free access' : a.wheelchair === 'limited' ? 'Limited step-free access' : a.wheelchair === 'no' ? 'Not step-free' : '',
-      a.fee === 'no' ? 'Free entry' : a.fee === 'yes' ? 'Entry fee' : '',
-      a.opening_hours ? 'Hours: ' + a.opening_hours : '',
-    ].filter(Boolean);
-    if (access.length || a.website) row('accessible', 'Access', esc(access.join(' · ')) + (a.website ? `${access.length ? ' · ' : ''}<a href="${esc(a.website)}" target="_blank" rel="noopener">Website</a>` : ''));
     if (!rows.length) return '';
-    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', Object.keys(a).length && 'OpenStreetMap', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
-    return `<div id="facts" class="facts"><div class="bold">Recognition &amp; access</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
+    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
+    return `<div id="facts" class="facts"><div class="bold">Recognition</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
   }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
@@ -1061,13 +1050,13 @@
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div>
-          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition and access">${factIcons(b)}</button>` : ''}</div>
+          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition">${factIcons(b)}</button>` : ''}</div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
         ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
-        <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
-        <div class="row-flex">
-          <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
-          <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
+        <div class="action-row">
+          <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
+          <button class="btn-ic ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}" aria-label="${isSaved(b.id) ? 'Saved' : 'Save'}" title="${isSaved(b.id) ? 'Saved' : 'Save'}">${icon(isSaved(b.id) ? 'bookmarkCheck' : 'bookmark')}</button>
+          <a class="btn-ic" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener" aria-label="Directions" title="Directions">${icon('navigate')}</a>
         </div>
         <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('layers', 'sm')}Similar Places</button>
         <div class="about">
@@ -1095,13 +1084,23 @@
     const own = uid === state.me;
     const vs = visitsBy(uid);
     const cities = new Set(vs.map(v => BY_ID[v.buildingId] && (BY_ID[v.buildingId].city || BY_ID[v.buildingId].country))).size;
+    // Full critique cards: their photos (or the place's), place, date, stars, note and tags.
     const recent = vs.slice().sort((a, b) => b.createdAt - a.createdAt).map(v => {
       const b = BY_ID[v.buildingId]; if (!b) return '';
-      return `<button class="row" data-go="#/b/${b.id}">
-        ${ph(b, { style: 'width:38px;height:38px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${v.note ? esc(v.note) : esc(b.city)}</div></div>
-        ${starsHTML(v.stars)}
-      </button>`;
+      const where = [kindOf(b) !== 'building' && KINDS[kindOf(b)], b.city, fmtDate(v.visitedOn)].filter(Boolean).join(' · ');
+      return `<div class="crit-card">
+        ${v.photos && v.photos.length ? shotsHTML(v.photos) : ph(b, { w: 600, cls: 'crit-photo', label: phLabel(b) })}
+        <div class="crit-body">
+          <div class="row-flex" style="align-items:flex-start">
+            <div class="grow" style="min-width:0"><b class="crit-name" data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted ellipsis">${esc(where)}</div></div>
+            <span class="chip" style="flex-shrink:0"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>
+          </div>
+          <div class="rating-line">${starsHTML(v.stars, 'md')}<span class="small muted">${STAR_WORDS[v.stars]}</span></div>
+          ${v.note ? `<div class="quote">${esc(v.note)}</div>` : ''}
+          ${likeChips(v.likes)}
+          <div class="card-actions">${v.userId === state.me ? `<button class="link" data-go="#/log/${b.id}">${icon('edit', 'sm')}Edit</button>` : `<button class="link ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>`}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
+        </div>
+      </div>`;
     }).join('');
 
     const following = isFollowing(state.me, uid);
@@ -1134,14 +1133,14 @@
           <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
           ${icon('chevron', 'sm')}</button>` : ''}
-        <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
+        <div><div class="section-title tight">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div class="been-wrap">
             <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div>
             ${vs.length ? `<button class="btn-sq map-heatbtn ${beenHeat ? 'on' : ''}" data-act="beenheat" aria-label="Toggle heatmap">${icon('flame')}</button>
             <button class="btn-sq map-locate" data-act="beenfit" aria-label="Show everywhere">${icon('locate')}</button>
             <div id="been-card"></div>` : ''}
           </div></div>
-        <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+        <div><div class="section-title">Critiques</div><div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
