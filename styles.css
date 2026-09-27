@@ -37,6 +37,22 @@
   --muted: var(--text-2); /* used by inline styles in app.js */
 }
 
+/* Dark mode: follows the system unless the person picks one explicitly (data-theme). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f2f2f2; --text-2: #a8a8ad; --text-3: #77777c; --paper: #1c1c1e; --bg: #121212;
+    --board: #000000; --line: #2c2c2e; --line-2: #38383a; --fill: #232325; --ph: #232325;
+    --float: 0 4px 20px rgba(0, 0, 0, .5); --grid: #2c2c2e; --grid-bg: #1c1c1e;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #f2f2f2; --text-2: #a8a8ad; --text-3: #77777c; --paper: #1c1c1e; --bg: #121212;
+  --board: #000000; --line: #2c2c2e; --line-2: #38383a; --fill: #232325; --ph: #232325;
+  --float: 0 4px 20px rgba(0, 0, 0, .5); --grid: #2c2c2e; --grid-bg: #1c1c1e;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .leaflet-tile-pane { filter: grayscale(1) contrast(.85) brightness(.65) invert(1) hue-rotate(180deg); } }
+:root[data-theme="dark"] .leaflet-tile-pane { filter: grayscale(1) contrast(.85) brightness(.65) invert(1) hue-rotate(180deg); }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
