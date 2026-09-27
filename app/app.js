@@ -617,6 +617,10 @@
         ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
       <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
+        ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
+          <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
+          ${icon('chevron', 'sm')}</button>` : ''}
         <div class="section"><div class="section-title">Top 4</div><div class="top4">${top}${topFill}</div></div>
         <div class="section"><div class="section-title">Tier list<span class="small muted" style="font-weight:500">Avg ${avg}★</span></div>
           <div class="stack-6">${tiers || '<div class="empty">No ratings yet.</div>'}</div></div>
@@ -646,6 +650,207 @@
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
+  }
+
+  // ---------- Wrapped ----------
+  // A story-style recap of one critic's logs: tap right/left to move, slides auto-advance.
+  const WRAP_MS = 6000;
+  let wrapUid = null, wrapIdx = 0, wrapTimer = null;
+
+  function wrapStars(n) { return '★'.repeat(n) + '<span style="opacity:.35">' + '★'.repeat(5 - n) + '</span>'; }
+  function wrapPersona(avg) {
+    if (avg >= 4.5) return ['The Superfan', 'Every building is a pilgrimage.'];
+    if (avg >= 3.8) return ['The Romantic', 'Generous, with a clear eye.'];
+    if (avg >= 3) return ['The Fair Judge', 'Honest ratings, no favourites.'];
+    return ['The Shade Thrower', 'Few buildings survive the gaze.'];
+  }
+
+  function wrapSlides(u) {
+    const own = u.id === state.me;
+    const first = esc(u.name.split(' ')[0]);
+    const who = own ? 'You' : first;
+    const vs = visitsBy(u.id).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const bs = vs.map(v => BY_ID[v.buildingId]);
+    const tally = list => {
+      const m = {};
+      list.filter(Boolean).forEach(x => { m[x] = (m[x] || 0) + 1; });
+      return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    };
+    const year = new Date().getFullYear();
+    const intro = {
+      bg: INK,
+      html: `<div class="w-kicker">throwShade Wrapped ${year}</div>
+        <div>${avatar(u, 'lg').replace('data-go', 'data-x')}</div>
+        <div class="w-big">${own ? 'Your' : first + '’s'} year in shade</div>
+        <div class="w-sub">Every building ${own ? 'you' : first} walked into, rated and remembered. Tap to begin.</div>`,
+    };
+    if (!vs.length) {
+      return [intro, {
+        bg: '#1d6f8c',
+        html: `<div class="w-big">Nothing logged yet</div><div class="w-sub">${own ? 'Log a building and your' : first + ' hasn’t logged anything, so their'} Wrapped fills itself in.</div>
+          ${own ? '<div class="w-btns"><button class="w-btn" data-go="#/log">Log a building</button></div>' : ''}`,
+      }];
+    }
+
+    const slides = [intro];
+    const cities = new Set(bs.map(b => b.city).filter(Boolean)).size;
+    const countries = new Set(bs.map(b => b.country).filter(Boolean)).size;
+    slides.push({
+      bg: '#1d6f8c',
+      html: `<div class="w-kicker">${who} logged</div>
+        <div class="w-huge" data-count="${vs.length}">0</div>
+        <div class="w-big">building${vs.length === 1 ? '' : 's'}</div>
+        <div class="w-sub">across ${cities} cit${cities === 1 ? 'y' : 'ies'}${countries > 1 ? ` in ${countries} countries` : ''}.</div>`,
+    });
+
+    const topV = vs[0], topB = bs[0];
+    slides.push({
+      bg: '#111',
+      photo: ph(topB, { w: 900, go: false, cls: 'wrap-photo' }),
+      bottom: true,
+      html: `<div class="w-kicker">${own ? 'Your' : first + '’s'} #1</div>
+        <div class="w-big">${esc(topB.name)}</div>
+        <div class="w-sub">${esc(makerLine(topB))}</div>
+        <div class="w-stars">${wrapStars(topV.stars)}</div>
+        ${topV.note ? `<div class="w-quote">“${esc(topV.note)}”</div>` : ''}`,
+    });
+
+    if (vs.length > 1) {
+      slides.push({
+        bg: '#2f6b4f',
+        html: `<div class="w-kicker">Top buildings</div>
+          <div class="w-list">${vs.slice(0, 5).map((v, i) => `<div class="w-row"><span class="n">${i + 1}</span>${ph(BY_ID[v.buildingId], { w: 120, go: false })}
+            <div class="grow"><b>${esc(BY_ID[v.buildingId].name)}</b><span class="s">${esc(BY_ID[v.buildingId].city || '')} · ${v.stars}★</span></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const styles = tally(bs.map(b => b.style));
+    if (styles.length) {
+      const [style, n] = styles[0];
+      slides.push({
+        bg: STYLES[style] || '#7c6a58',
+        html: `<div class="w-kicker">Top style</div>
+          <div class="w-big">${esc(style)}</div>
+          <div class="w-sub">${n} of ${vs.length} logs · ${Math.round(n / vs.length * 100)}%</div>
+          <div class="w-list">${styles.slice(0, 4).map(([s, c]) => `<div><div class="w-bar-label"><span>${esc(s)}</span><span>${c}</span></div><div class="w-bar"><div style="width:${Math.round(c / n * 100)}%"></div></div></div>`).join('')}</div>`,
+      });
+    }
+
+    const architects = tally(bs.map(b => b.architect));
+    if (architects.length && architects[0][1] > 1) {
+      const [name, n] = architects[0];
+      const works = bs.filter(b => b.architect === name).slice(0, 3);
+      slides.push({
+        bg: '#8a4fa0',
+        html: `<div class="w-kicker">Most-logged architect</div>
+          <div class="w-big">${esc(name)}</div>
+          <div class="w-sub">${n} buildings. ${who} keep${own ? '' : 's'} coming back.</div>
+          <div class="w-thumbs">${works.map(b => ph(b, { w: 200, go: false })).join('')}</div>`,
+      });
+    }
+
+    const looks = tally(vs.flatMap(v => v.likes));
+    if (looks.length) {
+      slides.push({
+        bg: '#c2410c',
+        html: `<div class="w-kicker">${who} notice${own ? '' : 's'} the</div>
+          <div class="w-huge" style="font-size:72px">${esc(looks[0][0])}</div>
+          <div class="w-sub">Tagged ${looks[0][1]} time${looks[0][1] === 1 ? '' : 's'}. Also on the list:</div>
+          <div class="w-chips">${looks.slice(1, 7).map(([l, c]) => `<span class="w-chip">${esc(l)} ${c}</span>`).join('')}</div>`,
+      });
+    }
+
+    const dated = bs.filter(b => b.year).sort((a, b) => a.year - b.year);
+    if (dated.length > 1 && dated[dated.length - 1].year - dated[0].year >= 10) {
+      const old = dated[0], young = dated[dated.length - 1];
+      slides.push({
+        bg: '#a68a1d',
+        html: `<div class="w-kicker">Time travel</div>
+          <div class="w-huge" data-count="${young.year - old.year}">0</div>
+          <div class="w-big">years of architecture</div>
+          <div class="w-list">
+            <div class="w-row">${ph(old, { w: 120, go: false })}<div class="grow"><span class="s">Oldest · ${old.year}</span><b>${esc(old.name)}</b></div></div>
+            <div class="w-row">${ph(young, { w: 120, go: false })}<div class="grow"><span class="s">Newest · ${young.year}</span><b>${esc(young.name)}</b></div></div>
+          </div>`,
+      });
+    }
+
+    const low = vs[vs.length - 1];
+    if (vs.length > 1 && low.stars <= 3) {
+      const lb = BY_ID[low.buildingId];
+      slides.push({
+        bg: '#b3364a',
+        photo: ph(lb, { w: 900, go: false, cls: 'wrap-photo' }),
+        bottom: true,
+        html: `<div class="w-kicker">Most shade thrown at</div>
+          <div class="w-big">${esc(lb.name)}</div>
+          <div class="w-stars">${wrapStars(low.stars)}</div>
+          ${low.note ? `<div class="w-quote">“${esc(low.note)}”</div>` : `<div class="w-sub">${STAR_WORDS[low.stars]}.</div>`}`,
+      });
+    }
+
+    const avg = vs.reduce((s, v) => s + v.stars, 0) / vs.length;
+    const [persona, line] = wrapPersona(avg);
+    slides.push({
+      bg: '#1c1c1e',
+      html: `<div class="w-kicker">Average rating</div>
+        <div class="w-huge"><span data-count="${avg.toFixed(1)}" data-dec="1">0</span><span style="font-size:.5em">★</span></div>
+        <div class="w-kicker" style="margin-top:12px">Critic type</div>
+        <div class="w-big">${persona}</div>
+        <div class="w-sub">${line}</div>`,
+    });
+
+    slides.push({
+      bg: STYLES[styles[0][0]] || INK,
+      last: true,
+      html: `<div class="w-card">
+          <div style="display:flex;align-items:center;gap:12px">${avatar(u, 'md').replace('data-go', 'data-x')}<div class="grow"><b>${esc(u.name)}</b><div class="small muted">throwShade Wrapped ${year}</div></div></div>
+          <div class="w-card-grid">
+            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div class="ellipsis"><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
+            <div><div class="caps">Top style</div><div><b>${esc(styles[0][0])}</b></div>
+              <div class="caps" style="margin-top:8px">Architect</div><div class="ellipsis"><b>${esc(architects[0][0])}</b></div></div>
+            <div><div class="caps">Logged</div><div class="w-card-num">${vs.length}</div></div>
+            <div><div class="caps">Critic type</div><div><b>${persona}</b></div></div>
+          </div>
+        </div>
+        <div class="w-btns"><button class="w-btn ghost" data-act="wrapreplay">Replay</button><button class="w-btn" data-act="wrapshare" data-id="${u.id}">Share</button></div>`,
+    });
+    return slides;
+  }
+
+  function viewWrapped(uid) {
+    const u = user(uid);
+    if (!u) return viewNotFound();
+    if (wrapUid !== uid) { wrapUid = uid; wrapIdx = 0; }
+    const slides = wrapSlides(u);
+    wrapIdx = Math.max(0, Math.min(wrapIdx, slides.length - 1));
+    const s = slides[wrapIdx];
+    const last = wrapIdx === slides.length - 1;
+    const bars = slides.map((_, i) => `<div><span class="${i < wrapIdx || (i === wrapIdx && last) ? 'done' : i === wrapIdx ? 'run' : ''}"></span></div>`).join('');
+    return `<div class="screen fixed wrap" style="background:${s.bg}">
+      ${s.photo || ''}
+      <div class="wrap-bars">${bars}</div>
+      <button class="btn-sq wrap-close" data-act="wrapclose" aria-label="Close">${icon('x')}</button>
+      <button class="wrap-tap prev" data-act="wrapprev" aria-label="Previous"></button>
+      ${last ? '' : '<button class="wrap-tap next" data-act="wrapnext" aria-label="Next"></button>'}
+      <div class="wrap-body ${s.bottom ? 'bottom' : ''}" data-n="${slides.length}">${s.html}</div>
+    </div>`;
+  }
+
+  function startWrap() {
+    clearTimeout(wrapTimer);
+    const body = root.querySelector('.wrap-body');
+    if (!body) return;
+    root.querySelectorAll('[data-count]').forEach(el => {
+      const to = +el.dataset.count, dec = +(el.dataset.dec || 0), t0 = Date.now();
+      const tick = setInterval(() => {
+        const k = Math.min(1, (Date.now() - t0) / 1000);
+        el.textContent = (to * (1 - Math.pow(1 - k, 3))).toFixed(dec);
+        if (k >= 1 || !el.isConnected) clearInterval(tick);
+      }, 30);
+    });
+    if (wrapIdx < +body.dataset.n - 1) wrapTimer = setTimeout(() => { if (currentPath().startsWith('/wrapped')) actions.wrapnext(); }, WRAP_MS);
+    else if (body.querySelector('.w-card')) { Sound.success(); celebrate(); }
   }
 
   function viewEditProfile() {
@@ -1258,6 +1463,8 @@
     if (trail.length > 50) trail.splice(0, trail.length - 50);
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
     if (seg[0] !== 'log') { draft = null; delArmed = false; }
+    clearTimeout(wrapTimer);
+    if (seg[0] !== 'wrapped') wrapUid = null;
 
     destroyMap();
     let html, after;
@@ -1273,6 +1480,7 @@
       case 'followers': html = viewFollowList(seg[1], 'followers'); break;
       case 'following': html = viewFollowList(seg[1], 'following'); break;
       case 'editprofile': html = viewEditProfile(); break;
+      case 'wrapped': html = viewWrapped(seg[1] || state.me); after = startWrap; break;
       case 'log': html = seg[1] ? viewLogRate(seg[1]) : viewLogPick(); break;
       case 'pin': {
         const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(seg[1] || '');
@@ -1355,6 +1563,19 @@
       else toast(text);
     },
     closelog() { draft = null; back(); },
+    wrapnext() { wrapIdx++; Sound.tap(); render(); },
+    wrapprev() { wrapIdx = Math.max(0, wrapIdx - 1); render(); },
+    wrapreplay() { wrapIdx = 0; render(); },
+    wrapclose() { back(); },
+    wrapshare(d) {
+      const u = user(d.id);
+      const vs = visitsBy(d.id).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+      const top = vs[0] ? BY_ID[vs[0].buildingId].name : '';
+      const text = `${u.name}’s throwShade Wrapped: ${vs.length} buildings logged${top ? ', #1 is ' + top : ''}.`;
+      if (navigator.share) navigator.share({ title: 'throwShade Wrapped', text }).catch(() => {});
+      else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'), () => toast(text));
+      else toast(text);
+    },
     closeedit() { pickedPhoto = undefined; back(); },
     // Only marks the choice; typed name/handle/bio survive because the screen isn't re-rendered.
     shuffleavatar() { setPicked(randomAvatar(pickedPhoto)); },
