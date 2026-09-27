@@ -471,10 +471,11 @@
       const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
       const kpill = (k, label) => `<button class="pill ${mapKind === k ? 'on' : ''}" data-act="mapkind" data-k="${k}">${label}</button>`;
+      const typeLabel = KIND_LABEL[mapKind] + (mapStyle !== 'all' ? ` · ${mapStyle}` : '');
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
         <div class="pills">
-          <button class="pill ${mapKindOpen ? 'on' : ''}" data-act="mapkindtoggle">${KIND_LABEL[mapKind]}${icon('chevron', 'sm')}</button>
+          <button class="pill ${mapKindOpen || mapStyle !== 'all' ? 'on' : ''}" data-act="mapkindtoggle">${mapStyle !== 'all' ? `<span class="dot" style="background:${STYLES[mapStyle]}"></span>` : ''}${typeLabel}${icon('chevron', 'sm')}</button>
           <span class="pill-sep"></span>
           ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
         </div>
@@ -1816,7 +1817,7 @@
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
     mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
     mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
-    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapSel = null; render(); },
+    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapKindOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
     locate() {
       requestLocation(ok => {
