@@ -186,7 +186,7 @@
       .slice(0, limit || 10);
   }
   // Radio: a Spotify-radio-style queue of places similar to one seed — same architect/style/kind/city/era win.
-  let radioSeedId = null, radioIdx = 0;
+  let radioSeedId = null, radioIdx = 0, radioMap = null;
   function radioQueue(seedId) {
     const seed = BY_ID[seedId];
     if (!seed) return [];
@@ -715,27 +715,29 @@
     const queue = radioQueue(seedId);
     if (!queue.length) {
       return `<div class="screen with-nav">
-        <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Radio</div></div>
-        <div class="pad"><div class="empty">Not enough similar places to start a radio from ${esc(seed.name)} yet.</div></div>
+        <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">Similar Places</div></div>
+        <div class="pad"><div class="empty">Not enough similar places to ${esc(seed.name)} yet.</div></div>
       </div>${nav('')}`;
     }
     if (radioIdx >= queue.length) radioIdx = 0;
     const b = queue[radioIdx];
     const a = avgFor(b.id);
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${icon('radio', 'sm')} Radio from ${esc(seed.name)}</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">Similar to ${esc(seed.name)}</div></div>
       <div class="pad stack">
-        ${ph(b, { w: 900, cls: 'hero', style: 'height:260px;border-radius:16px', label: phLabel(b) })}
+        ${ph(b, { w: 900, cls: 'hero', style: 'height:220px;border-radius:16px', label: phLabel(b) })}
         <div><div class="h-building">${esc(b.name)}</div><div class="muted" style="margin-top:2px">${esc(makerLine(b))}</div></div>
         <div class="row-flex" style="align-items:center;justify-content:space-between">
           ${a.avg ? scoreHTML(a.avg.toFixed(1)) : `<span class="muted small">Not rated yet</span>`}
           <span class="small muted">${radioIdx + 1} of ${queue.length}</span>
         </div>
+        <div class="pin-map" id="radiomap" style="height:130px"></div>
+        <div class="small muted" style="margin-top:-6px">${fmtKm(km(seed, b))} from ${esc(seed.name)}</div>
         <div class="row-flex">
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <button class="btn block" data-go="#/b/${b.id}">${icon('external', 'sm')}Open</button>
         </div>
-        <button class="btn-primary" data-act="radioskip">${icon('radio', 'sm')}Next up</button>
+        <button class="btn-primary" data-act="radioskip">Next similar place</button>
       </div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -1070,7 +1072,7 @@
           <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
           <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
         </div>
-        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('radio', 'sm')}Start Radio</button>
+        <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('layers', 'sm')}Similar Places</button>
         <div class="about">
           <div class="bold">About</div>
           ${b.blurb ? `<div class="quote">${esc(b.blurb)}</div>` : b.enriching ? '<div class="muted small">Looking up Wikipedia…</div>' : ''}
@@ -1638,6 +1640,7 @@
     if (map) { map.remove(); map = null; mapMarkers = {}; heatLayer = null; }
     if (pinMap) { pinMap.remove(); pinMap = null; }
     if (beenMap) { beenMap.remove(); beenMap = null; }
+    if (radioMap) { radioMap.remove(); radioMap = null; }
     clusterGroup = null; heatLayer = null;
     pinMode = false;
   }
@@ -2062,6 +2065,20 @@
          <button class="btn-primary" data-act="savenamed">Add and rate it</button>
        </div>`);
   }
+  function initRadioMap() {
+    const seed = BY_ID[radioSeedId];
+    const queue = radioQueue(radioSeedId);
+    const b = queue[radioIdx];
+    if (!window.L || !seed || !b || !document.getElementById('radiomap')) return;
+    radioMap = window.L.map('radiomap', { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+      touchZoom: false, boxZoom: false, keyboard: false, attributionControl: false });
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(radioMap);
+    window.L.marker([seed.lat, seed.lng], { icon: window.L.divIcon({ className: '', html: '<div class="pin me"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(radioMap);
+    window.L.marker([b.lat, b.lng], { icon: window.L.divIcon({ className: '', html: '<div class="drop"></div>', iconSize: [22, 30], iconAnchor: [11, 30] }), interactive: false }).addTo(radioMap);
+    radioMap.fitBounds([[seed.lat, seed.lng], [b.lat, b.lng]], { padding: [28, 28], maxZoom: 15 });
+    setTimeout(() => radioMap && radioMap.invalidateSize(), 0);
+  }
+
   function initPin(lat, lng) {
     const key = pinKey(lat, lng);
     if (!lookups[key] || (lookups[key].status === 'done' && lookups[key].error)) lookupPin(key, lat, lng);
@@ -2273,7 +2290,7 @@
       case 'newlist': html = viewNewList(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
-      case 'radio': html = viewRadio(seg[1]); break;
+      case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
