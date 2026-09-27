@@ -593,6 +593,7 @@
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
+  let pTab = 'critiques';
   let draft = null;
   let resetArmed = false;
   let delArmed = false;
@@ -1200,7 +1201,14 @@
           <div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div>
         </div></div>` : '';
       })()}
-      <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+      <div class="pad" style="padding-top:14px">
+        <div class="tabs">
+          <button class="${pTab === 'critiques' ? 'on' : ''}" data-act="ptab" data-k="critiques">Critiques · ${vs.length}</button>
+          <button class="${pTab === 'stats' ? 'on' : ''}" data-act="ptab" data-k="stats">Stats</button>
+        </div>
+      </div>
+      <div class="pad" style="padding-top:16px;display:flex;flex-direction:column;gap:18px">
+        ${pTab === 'stats' ? `
         ${(() => {
           const badges = badgesFor(uid);
           const earned = badges.filter(x => x.earned).length;
@@ -1220,6 +1228,7 @@
           <div class="grow"><b>Friend Leaderboard</b><div class="sub">Who's logged the most this month</div></div>
           ${icon('chevron', 'sm')}
         </button>` : ''}
+        ` : `
         <div><div class="section-title tight">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div class="been-wrap">
             <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div>
@@ -1227,7 +1236,8 @@
             <button class="btn-sq map-locate" data-act="beenfit" aria-label="Show everywhere">${icon('locate')}</button>
             <div id="been-card"></div>` : ''}
           </div></div>
-        <div><div class="section-title">Critiques</div><div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+        <div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div>
+        `}
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
@@ -2573,6 +2583,7 @@
     radioskip() { radioIdx++; render(); },
     sort(d) { listSort = d.k; render(); },
     btab(d) { bTab = d.k; render(); },
+    ptab(d) { pTab = d.k; render(); },
     // Place type is single-choice ("All" clears it); Been / Want / Friends toggle on and off.
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
     mapkind(d) { mapKind = d.k; mapFiltersOpen = false; mapSel = null; render(); },
