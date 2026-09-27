@@ -144,10 +144,10 @@
       id: l.id, name: l.name, ownerId: l.ownerId, members: l.members.slice(), invitesNewUsers: !!l.invitesNewUsers, createdAt: now - l.hoursAgo * HOUR,
       items: l.items.filter(([bid]) => BY_ID[bid]).map(([bid, by], i) => ({ buildingId: bid, addedBy: by || l.ownerId, createdAt: now - (l.hoursAgo - i) * HOUR })),
     }));
-    return { me: null, users, follows, visits, want, places: [], lists };
+    return { me: null, users, follows, visits, want, places: [], lists, activity: [], activitySeen: {} };
   }
   function load() {
-    try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.users ? Object.assign({ places: [], lists: [] }, s) : null; } catch (e) { return null; }
+    try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.users ? Object.assign({ places: [], lists: [], activity: [], activitySeen: {} }, s) : null; } catch (e) { return null; }
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); return true; } catch (e) { return false; }
@@ -384,6 +384,17 @@
     state.visits.forEach(v => { if (fids.has(v.userId) && v.createdAt >= since) counts[v.userId] = (counts[v.userId] || 0) + 1; });
     return Array.from(fids).map(uid => ({ u: user(uid), n: counts[uid] || 0 })).filter(x => x.u).sort((a, b) => b.n - a.n);
   }
+  // ---------- Activity (follows, comments, achievements) ----------
+  function logActivity(forUid, type, data) {
+    state.activity.push({ id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), forUid, type, data, createdAt: Date.now() });
+    if (state.activity.length > 300) state.activity.splice(0, state.activity.length - 300);
+  }
+  function unreadActivity(uid) {
+    const seen = state.activitySeen[uid] || 0;
+    return state.activity.filter(a => a.forUid === uid && a.createdAt > seen).length;
+  }
+  function markActivitySeen(uid) { state.activitySeen[uid] = Date.now(); }
+
   function guideBuildings(dim, key) {
     if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
     if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
@@ -485,6 +496,7 @@
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
     sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
     flame: '<path d="M12 22a6 6 0 0 0 6-6c0-3-2-4.5-3-7-0.5 1.5-1.5 2.5-2.5 2.5C13 9 13.5 6 11 2c0 4-4 6-5.5 9.5A6.8 6.8 0 0 0 5 14a7 7 0 0 0 7 8z"/>',
+    bell: '<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -616,7 +628,7 @@
 
   // ---------- UI state ----------
   const root = document.getElementById('app');
-  let beenMap = null, inviteSel = new Set();
+  let beenMap = null, inviteSel = new Set(), newListPublic = false;
   let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
   let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
@@ -688,7 +700,9 @@
 
   function viewHome(tab) {
     const head = `
-      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}</div>`;
+      <div class="topbar">${tab === 'map' ? '<div class="h1">Map</div>' : `<div class="wordmark-group">${logoSVG(24)}<div class="wordmark">throwShade</div></div>`}
+        ${tab === 'map' ? '' : `<a href="#/activity" class="btn-sq thin" style="position:relative" aria-label="Activity">${icon('bell', 'sm')}${unreadActivity(state.me) ? '<span class="nav-dot" style="top:6px;right:6px"></span>' : ''}</a>`}
+      </div>`;
     if (tab === 'map') {
       const KIND_LABEL = { all: 'All types', building: 'Buildings', bridge: 'Bridges', art: 'Art', spot: 'Spots' };
       const pill = (k, label) => `<button class="pill ${mapFilter === k ? 'on' : ''}" data-act="mapfilter" data-k="${k}">${label}</button>`;
@@ -961,7 +975,10 @@
           <div class="avatars">${l.members.slice(0, 3).map(m => user(m)).filter(Boolean).map(u => avatar(u, 'xs').replace('data-go', 'data-x')).join('')}</div>
         </button>`).join('')}
       </div>
-      <div class="pad" style="margin-top:14px"><button class="btn dashed" style="width:100%;height:52px" data-go="#/newlist">${icon('plus', 'sm')}New list</button></div>`;
+      <div class="pad" style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn block dashed" style="height:52px" data-go="#/newlist">${icon('plus', 'sm')}New list</button>
+        <button class="btn block dashed" style="height:52px" data-go="#/discover-lists">${icon('search', 'sm')}Discover</button>
+      </div>`;
     }
     return `<div class="screen with-nav">
       <div class="topbar"><div class="h1">Lists</div><button class="btn-sq thin" data-go="#/newlist" aria-label="New list">${icon('plus')}</button></div>
@@ -991,6 +1008,23 @@
     </div>${nav('lists')}`;
   }
 
+  function viewDiscoverLists() {
+    const lists = state.lists.filter(l => l.public).sort((a, b) => b.createdAt - a.createdAt);
+    const rows = lists.length ? lists.map(l => {
+      const owner = user(l.ownerId);
+      return `<button class="row" data-go="#/list/${l.id}">
+        ${listTile(l)}
+        <div class="grow"><b class="ellipsis">${esc(l.name)}</b><div class="sub ellipsis">${l.items.length} place${l.items.length === 1 ? '' : 's'}${owner ? ' · by @' + esc(owner.handle) : ''}</div></div>
+        ${icon('chevron', 'sm')}
+      </button>`;
+    }).join('') : `<div class="empty">No public lists yet. Make one discoverable when you create it.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Discover Lists</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
   function viewBeenList() {
     const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
     const rows = vs.map((v, i) => {
@@ -1011,22 +1045,23 @@
 
   function viewList(id) {
     const l = state.lists.find(x => x.id === id);
-    if (!l || !l.members.includes(state.me)) return viewNotFound();
+    const member = l && l.members.includes(state.me);
+    if (!l || (!member && !l.public)) return viewNotFound();
     const rows = l.items.slice().sort((a, b) => b.createdAt - a.createdAt).map(it => {
       const b = BY_ID[it.buildingId]; if (!b) return '';
       const adder = user(it.addedBy);
-      const canRemove = it.addedBy === state.me || l.ownerId === state.me;
+      const canRemove = member && (it.addedBy === state.me || l.ownerId === state.me);
       return placeRow(b, [b.city, adder && (adder.id === state.me ? 'added by you' : 'added by @' + adder.handle)].filter(Boolean).join(' · '),
         canRemove ? `<button class="btn-sq thin" style="width:34px;height:34px" data-act="unlist" data-list="${l.id}" data-id="${b.id}" aria-label="Remove">${icon('x', 'sm')}</button>` : '');
     }).join('');
     const members = l.members.map(user).filter(Boolean);
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow ellipsis">${esc(l.name)}</div>
-        <button class="btn-sq thin" data-go="#/list/${l.id}/invite" aria-label="Invite people">${icon('users')}</button></div>
-      <div class="pad members" data-go="#/list/${l.id}/invite">
+        ${member ? `<button class="btn-sq thin" data-go="#/list/${l.id}/invite" aria-label="Invite people">${icon('users')}</button>` : ''}</div>
+      <div class="pad members" ${member ? `data-go="#/list/${l.id}/invite"` : ''}>
         <div class="avatars">${members.slice(0, 5).map(u => avatar(u, 'xs').replace('data-go', 'data-x')).join('')}</div>
-        <span class="small muted">${members.length} member${members.length === 1 ? '' : 's'} · ${l.ownerId === state.me ? 'you made this list' : 'made by @' + esc(user(l.ownerId).handle)}</span>
-        <span class="small" style="margin-left:auto">Invite</span>
+        <span class="small muted">${members.length} member${members.length === 1 ? '' : 's'} · ${l.ownerId === state.me ? 'you made this list' : 'made by @' + esc(user(l.ownerId).handle)}${l.public ? ' · public' : ''}</span>
+        ${member ? '<span class="small" style="margin-left:auto">Invite</span>' : ''}
       </div>
       <div class="stack-6 pad">${rows || '<div class="empty">No places yet.<br>Tap Save on any place to add it here.</div>'}</div>
       <div class="spacer"></div>
@@ -1039,6 +1074,7 @@
     return `<div class="field"><label for="nl-name">List name</label><input id="nl-name" class="input" placeholder="e.g. Brutalist crawl" maxlength="40" autocomplete="off"></div>
       <div class="field"><div class="label">Invite people <span class="muted" style="font-weight:400">optional</span></div>
         <div class="chips">${others.map(u => `<button class="pill ${inviteSel.has(u.id) ? 'on' : ''}" data-act="pickinvite" data-u="${u.id}">@${esc(u.handle)}</button>`).join('')}</div></div>
+      <button class="pill ${newListPublic ? 'on' : ''}" data-act="togglepublic">${icon('search', 'sm')}${newListPublic ? 'Discoverable by everyone' : 'Make discoverable'}</button>
       <button class="btn-primary" data-act="createlist" data-bid="${bid || ''}">Create list</button>`;
   }
 
@@ -1115,6 +1151,7 @@
             ${v.note ? `<div>${esc(v.note)}</div>` : ''}
             ${likeChips(v.likes)}
             ${shotsHTML(v.photos)}
+            <button class="link" data-go="#/comments/${v.id}">${icon('feed', 'sm')}${(v.comments || []).length ? `${v.comments.length} comment${v.comments.length === 1 ? '' : 's'}` : 'Comment'}</button>
           </div></div>`;
       }).join('') : `<div class="empty">No critiques yet. Be the first to throw shade.</div>`;
     }
@@ -1368,6 +1405,63 @@
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Leaderboard</div></div>
       <div class="pad"><div class="caps">${monthName} · places logged</div></div>
       <div class="stack-6 pad">${body}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewComments(vid) {
+    const v = state.visits.find(x => x.id === vid);
+    const b = v && BY_ID[v.buildingId];
+    if (!v || !b) return viewNotFound();
+    const author = user(v.userId);
+    const comments = v.comments || [];
+    const rows = comments.length ? comments.map(c => {
+      const cu = user(c.userId); if (!cu) return '';
+      return `<div style="display:flex;gap:10px">
+        ${avatar(cu)}
+        <div class="grow" style="line-height:1.4">
+          <b data-go="#/u/${cu.id}">${c.userId === state.me ? 'You' : esc(cu.handle)}</b> <span class="tiny muted">${ago(c.createdAt)}</span>
+          <div>${esc(c.text)}</div>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty">No comments yet. Say something.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Comments</div></div>
+      <div class="pad">
+        <button class="row" data-go="#/b/${b.id}">
+          ${ph(b, { style: 'width:38px;height:38px', go: false })}
+          <div class="grow"><div class="ellipsis"><b>${author ? '@' + esc(author.handle) : ''}</b> rated ${esc(b.name)}</div><div class="sub">${starsHTML(v.stars)}</div></div>
+        </button>
+      </div>
+      <div class="pad row-flex" style="padding-bottom:16px">
+        <input class="input" id="comment-in" placeholder="Add a comment" autocomplete="off">
+        <button class="btn-sq" data-act="postcomment" data-id="${v.id}" aria-label="Post comment">${icon('check', 'sm')}</button>
+      </div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewActivity() {
+    const items = state.activity.filter(a => a.forUid === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);
+    const rows = items.length ? items.map(a => {
+      if (a.type === 'follow') {
+        const u = user(a.data.fromUid); if (!u) return '';
+        return `<button class="row" data-go="#/u/${u.id}">${avatar(u)}<div class="grow"><b>@${esc(u.handle)}</b> started following you</div><span class="tiny muted">${ago(a.createdAt)}</span></button>`;
+      }
+      if (a.type === 'comment') {
+        const u = user(a.data.fromUid); const b = BY_ID[a.data.buildingId];
+        if (!u || !b) return '';
+        return `<button class="row" data-go="#/comments/${a.data.visitId}">${avatar(u)}<div class="grow"><b>@${esc(u.handle)}</b> commented on your ${esc(b.name)} log</div><span class="tiny muted">${ago(a.createdAt)}</span></button>`;
+      }
+      if (a.type === 'achievement') {
+        return `<button class="row" data-go="#/me"><div class="list-icon">${icon('check', 'sm')}</div><div class="grow">${esc(a.data.label)}</div><span class="tiny muted">${ago(a.createdAt)}</span></button>`;
+      }
+      return '';
+    }).join('') : `<div class="empty">Nothing yet. Follows, comments and unlocks show up here.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Activity</div></div>
+      <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
   }
@@ -2450,7 +2544,7 @@
     if (trail.length > 50) trail.splice(0, trail.length - 50);
     if (seg[0] !== 'me' && seg[0] !== 'u') resetArmed = false;
     if (seg[0] !== 'log') { draft = null; delArmed = false; }
-    if (seg[0] !== 'save' && seg[0] !== 'newlist') inviteSel = new Set();
+    if (seg[0] !== 'save' && seg[0] !== 'newlist') { inviteSel = new Set(); newListPublic = false; }
     clearTimeout(wrapTimer);
     if (seg[0] !== 'wrapped') {
       wrapUid = null;
@@ -2473,6 +2567,10 @@
       case 'trending': html = viewTrending(); break;
       case 'leaderboard': html = viewLeaderboard(); break;
       case 'compare': html = viewCompare(seg[1]); break;
+      case 'comments': html = viewComments(seg[1]); break;
+      case 'discover-lists': html = viewDiscoverLists(); break;
+      case 'activity':
+        html = viewActivity(); markActivitySeen(state.me); save(); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me':
@@ -2564,14 +2662,15 @@
       if (inviteSel.has(d.u)) inviteSel.delete(d.u); else inviteSel.add(d.u);
       el.classList.toggle('on', inviteSel.has(d.u));
     },
+    togglepublic() { newListPublic = !newListPublic; render(); },
     createlist(d) {
       const name = document.getElementById('nl-name').value.trim();
       if (!name) return toast('Give the list a name');
-      const l = { id: 'l-' + Date.now().toString(36), name, ownerId: state.me, members: [state.me, ...inviteSel], items: [], createdAt: Date.now() };
+      const l = { id: 'l-' + Date.now().toString(36), name, ownerId: state.me, members: [state.me, ...inviteSel], items: [], createdAt: Date.now(), public: newListPublic };
       if (d.bid) l.items.push({ buildingId: d.bid, addedBy: state.me, createdAt: Date.now() });
       state.lists.push(l);
       const n = inviteSel.size;
-      inviteSel = new Set();
+      inviteSel = new Set(); newListPublic = false;
       save(); Sound.success();
       if (d.bid) render(); else location.replace('#/list/' + l.id);
       setTimeout(() => toast(`Created “${name}”` + (n ? ` · invited ${n}` : '')), 30);
@@ -2592,9 +2691,21 @@
     unwant(d) { state.want = state.want.filter(w => !(w.userId === state.me && w.buildingId === d.id)); save(); render(); },
     follow(d) {
       const i = state.follows.findIndex(f => f[0] === state.me && f[1] === d.id);
-      if (i >= 0) state.follows.splice(i, 1); else state.follows.push([state.me, d.id]);
+      if (i >= 0) state.follows.splice(i, 1);
+      else { state.follows.push([state.me, d.id]); logActivity(d.id, 'follow', { fromUid: state.me }); }
       save();
       if (currentPath().startsWith('/find')) document.getElementById('results').innerHTML = findResults(); else render();
+    },
+    postcomment(d) {
+      const el = document.getElementById('comment-in');
+      const text = el && el.value.trim();
+      if (!text) return;
+      const v = state.visits.find(x => x.id === d.id);
+      if (!v) return;
+      v.comments = v.comments || [];
+      v.comments.push({ id: 'c' + Date.now().toString(36), userId: state.me, text, createdAt: Date.now() });
+      if (v.userId !== state.me) logActivity(v.userId, 'comment', { fromUid: state.me, visitId: v.id, buildingId: v.buildingId });
+      save(); Sound.tap(); render();
     },
     radioskip() { radioIdx++; render(); },
     sort(d) { listSort = d.k; render(); },
@@ -2798,7 +2909,7 @@
       if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
       const challengeNow = challengeFor(state.me);
       if (!challengeWasDone && challengeNow.done) celebrations.push(`✅ Challenge complete: ${challengeNow.label}`);
-      if (celebrations.length) { state.newAchievement = true; save(); }
+      if (celebrations.length) { state.newAchievement = true; celebrations.forEach(m => logActivity(state.me, 'achievement', { label: m })); save(); }
       setTimeout(() => { celebrate(); toast(msg); }, 30);
       celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
