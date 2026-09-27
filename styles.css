@@ -127,7 +127,7 @@ button:active, .row:active { opacity: .6; }
 .pills::-webkit-scrollbar { display: none; }
 
 .seg { display: flex; padding: 3px; background: var(--fill); border-radius: 10px; }
-.seg button { flex: 1; height: 36px; border-radius: 8px; font-weight: 500; color: var(--text-2); }
+.seg button { flex: 1; height: 36px; border-radius: 8px; font-weight: 500; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .seg button.on { background: var(--paper); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
 
 /* Tabs */
@@ -547,7 +547,6 @@ button.shot { border: 0; padding: 0; cursor: zoom-in; display: block; width: 100
 .fact-row a { text-decoration: underline; text-underline-offset: 2px; }
 .inline-facts { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 4px; }
 
-.seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 
 /* ---------- Ratings on the place photo ---------- */
 .hero-ratings { position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
