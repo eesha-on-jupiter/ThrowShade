@@ -175,6 +175,16 @@
       .sort((x, y) => y.a.avg - x.a.avg || y.a.n - x.a.n)
       .slice(0, limit || 10);
   }
+  // Trending: most-logged places community-wide in the last 7 days.
+  function trending(limit) {
+    const since = Date.now() - 7 * DAY;
+    const counts = {};
+    state.visits.forEach(v => { if (v.createdAt >= since) counts[v.buildingId] = (counts[v.buildingId] || 0) + 1; });
+    return Object.entries(counts).map(([bid, n]) => ({ b: BY_ID[bid], n }))
+      .filter(x => x.b)
+      .sort((x, y) => y.n - x.n || (avgFor(y.b.id).avg || 0) - (avgFor(x.b.id).avg || 0))
+      .slice(0, limit || 10);
+  }
   // Recs: places you haven't logged, ranked by friends' ratings, styles you tend to love, and distance.
   function recsFor(uid, limit) {
     const visited = new Set(visitsBy(uid).map(v => v.buildingId));
@@ -192,44 +202,104 @@
       const friendVs = visitsFor(b.id).filter(v => fids.has(v.userId));
       const friendAvg = friendVs.length ? friendVs.reduce((s, v) => s + v.stars, 0) / friendVs.length : 0;
       const d = distMap.has(b.id) ? distMap.get(b.id) : 9999;
-      let score = 0, reason = null;
-      if (friendAvg >= 4) { score += friendAvg * 3; reason = friendVs.length > 1 ? `${friendVs.length} friends loved it` : 'A friend loved it'; }
-      if (!reason && favStyles.has(b.style)) { score += 4; reason = `You tend to love ${b.style}`; }
-      if (!reason && d < 3) { score += 2; reason = 'Right nearby'; }
+      let score = 0, reason = null, group = null;
+      if (friendAvg >= 4) {
+        score += friendAvg * 3; group = 'friends';
+        const one = friendVs.length === 1 && user(friendVs[0].userId);
+        reason = one ? `@${one.handle} gave it ${friendVs[0].stars}★` : `${friendVs.length} friends loved it`;
+      }
+      if (!reason && favStyles.has(b.style)) { score += 4; group = 'style:' + b.style; reason = `You tend to love ${b.style}`; }
+      if (!reason && d < 3) { score += 2; group = 'nearby'; reason = 'Right nearby'; }
       score += Math.max(0, 2 - d / 15);
-      return { b, score, reason, d };
+      return { b, score, reason, group, d };
     }).filter(x => x.reason);
     scored.sort((x, y) => y.score - x.score);
-    if (scored.length < (limit || 12)) {
-      const already = new Set(scored.map(x => x.b.id));
+    // Cap how many any one category can contribute, so friend-based recs (which score highest)
+    // don't crowd out every other reason — the point is a mix, not one dominant list.
+    const counts = {};
+    const capped = scored.filter(x => {
+      counts[x.group] = (counts[x.group] || 0) + 1;
+      return counts[x.group] <= (x.group === 'friends' ? 6 : 4);
+    });
+    const L = limit || 12;
+    if (capped.length < L) {
+      const already = new Set(capped.map(x => x.b.id));
       topRated(40).forEach(x => {
-        if (scored.length >= (limit || 12)) return;
+        if (capped.length >= L || (counts.top || 0) >= 4) return;
         if (visited.has(x.b.id) || already.has(x.b.id)) return;
-        scored.push({ b: x.b, score: 0, reason: 'Highly rated', d: distMap.get(x.b.id) });
+        capped.push({ b: x.b, score: 0, reason: 'Highly rated overall', group: 'top', d: distMap.get(x.b.id) });
+        counts.top = (counts.top || 0) + 1;
         already.add(x.b.id);
       });
     }
-    return scored.slice(0, limit || 12);
+    return capped.slice(0, L);
   }
-  // Guides: shelves grouped by style, kind and city — built from whatever data already exists.
-  function buildGuides() {
+  function recGroupLabel(g) {
+    if (g.startsWith('style:')) return `More ${g.slice(6)} for you`;
+    return { friends: 'Friends loved these', nearby: 'Near you', top: 'Highly rated' }[g] || 'Recommended';
+  }
+  // Guides: shelves grouped by style, kind, city, architect and decade — built from whatever data
+  // already exists. Each shelf carries a dim/key so it can filter the full list ("See all") and so
+  // shelves matching the viewer's own taste (styles/architects/cities they've rated well) sort first.
+  function buildGuides(uid) {
     const guides = [];
+    const push = (dim, key, title, list) => guides.push({ dim, key, title, sub: `${list.length} places`, items: rankByRating(list) });
     const byStyle = {};
     BUILDINGS.forEach(b => { if (b.style) (byStyle[b.style] = byStyle[b.style] || []).push(b); });
     Object.entries(byStyle).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 4)
-      .forEach(([style, list]) => guides.push({ title: style, sub: `${list.length} places`, items: rankByRating(list) }));
+      .forEach(([style, list]) => push('style', style, style, list));
     ['bridge', 'art', 'spot'].forEach(k => {
       const list = BUILDINGS.filter(b => kindOf(b) === k);
-      if (list.length) guides.push({ title: KINDS[k] + 's', sub: `${list.length} places`, items: rankByRating(list) });
+      if (list.length) push('kind', k, KINDS[k] + 's', list);
     });
     const byCity = {};
     BUILDINGS.forEach(b => { if (b.city) (byCity[b.city] = byCity[b.city] || []).push(b); });
     const topCity = Object.entries(byCity).sort((a, b) => b[1].length - a[1].length)[0];
-    if (topCity && topCity[1].length >= 3) guides.push({ title: topCity[0], sub: `${topCity[1].length} places`, items: rankByRating(topCity[1]) });
+    if (topCity && topCity[1].length >= 3) push('city', topCity[0], topCity[0], topCity[1]);
+    const byArchitect = {};
+    BUILDINGS.forEach(b => { if (b.architect) (byArchitect[b.architect] = byArchitect[b.architect] || []).push(b); });
+    Object.entries(byArchitect).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([architect, list]) => push('architect', architect, architect, list));
+    const byDecade = {};
+    BUILDINGS.forEach(b => { if (b.year) { const d = `${Math.floor(b.year / 10) * 10}s`; (byDecade[d] = byDecade[d] || []).push(b); } });
+    Object.entries(byDecade).filter(([, l]) => l.length >= 3).sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+      .forEach(([decade, list]) => push('decade', decade, decade, list));
+    if (uid) {
+      const favs = favoritesOf(uid);
+      const isFav = g => favs.has(g.dim + ':' + g.key);
+      return guides.filter(isFav).concat(guides.filter(g => !isFav(g)));
+    }
     return guides;
+  }
+  // Dims (style/architect/city) the viewer tends to rate 4★+ on their own visits.
+  function favoritesOf(uid) {
+    const totals = {};
+    visitsBy(uid).forEach(v => {
+      const b = BY_ID[v.buildingId]; if (!b) return;
+      ['style', 'architect', 'city'].forEach(dim => { if (b[dim]) (totals[dim + ':' + b[dim]] = totals[dim + ':' + b[dim]] || []).push(v.stars); });
+    });
+    const favs = new Set();
+    Object.entries(totals).forEach(([k, arr]) => { if (arr.reduce((s, n) => s + n, 0) / arr.length >= 4) favs.add(k); });
+    return favs;
+  }
+  // Taste compatibility: how closely two people's ratings agree on the places they've both logged.
+  function compatibility(a, b) {
+    const other = new Map(visitsBy(b).map(v => [v.buildingId, v.stars]));
+    const diffs = visitsBy(a).filter(v => other.has(v.buildingId)).map(v => Math.abs(v.stars - other.get(v.buildingId)));
+    if (diffs.length < 2) return null;
+    const avgDiff = diffs.reduce((s, n) => s + n, 0) / diffs.length;
+    return { pct: Math.round(100 - (avgDiff / 4) * 100), n: diffs.length };
   }
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
+  function guideBuildings(dim, key) {
+    if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
+    if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
+    if (dim === 'city') return BUILDINGS.filter(b => b.city === key);
+    if (dim === 'architect') return BUILDINGS.filter(b => b.architect === key);
+    if (dim === 'decade') return BUILDINGS.filter(b => b.year && `${Math.floor(b.year / 10) * 10}s` === key);
+    return [];
   }
   function photoFor(bid) {
     const vs = visitsFor(bid).filter(v => v.photos.length).sort((a, b) => (b.userId === state.me) - (a.userId === state.me) || b.createdAt - a.createdAt);
@@ -549,6 +619,40 @@
     return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
+  function viewGuide(dim, key) {
+    const list = rankByRating(guideBuildings(dim, key));
+    const title = dim === 'kind' ? KINDS[key] + 's' : key;
+    const rows = list.length ? list.map((b, i) => {
+      const a = avgFor(b.id);
+      return `<button class="row" data-go="#/b/${b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(makerLine(b))}</div></div>
+        ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
+      </button>`;
+    }).join('') : `<div class="empty">Nothing here yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">${esc(title)}</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
+  function viewTrending() {
+    const list = trending(50);
+    const rows = list.length ? list.map((x, i) => `<button class="row" data-go="#/b/${x.b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(makerLine(x.b))}</div></div>
+        <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
+      </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
+      <div class="stack-6 pad">${rows}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
+  }
+
   function buildingRow(b, right) {
     return `<button class="row" data-go="#/b/${b.id}">
       ${ph(b, { style: 'width:38px;height:38px', go: false })}
@@ -625,27 +729,57 @@
       <button class="${tab === 'guides' ? 'on' : ''}" data-go="#/lists/guides">Guides</button></div>`;
     let body;
     if (tab === 'recs') {
-      const recs = recsFor(state.me, 12);
-      body = `<div class="stack-6 pad">${recs.length ? recs.map(x => `<div class="row" data-go="#/b/${x.b.id}">
-          ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
-          <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
-          <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
-        </div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
+      const recs = recsFor(state.me, 16);
+      const groups = [];
+      const byGroup = {};
+      recs.forEach(x => {
+        if (!byGroup[x.group]) { byGroup[x.group] = { label: recGroupLabel(x.group), items: [] }; groups.push(byGroup[x.group]); }
+        byGroup[x.group].items.push(x);
+      });
+      body = `<div class="pad">${groups.length ? groups.map(g => `
+        <div class="section-title" style="margin-top:8px">${esc(g.label)}</div>
+        <div class="stack-6" style="margin-bottom:8px">${g.items.map(x => {
+          const a = avgFor(x.b.id);
+          return `<div class="row" data-go="#/b/${x.b.id}">
+            ${ph(x.b, { style: 'width:44px;height:44px', go: false })}
+            <div class="grow"><div class="ellipsis">${esc(x.b.name)}</div><div class="sub ellipsis">${esc(x.reason)}</div></div>
+            ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
+            <button class="btn-sq thin" style="width:36px;height:36px" data-go="#/save/${x.b.id}" aria-label="${isSaved(x.b.id) ? 'Saved' : 'Save'}">${icon(isSaved(x.b.id) ? 'bookmarkCheck' : 'bookmark', 'sm')}</button>
+          </div>`;
+        }).join('')}</div>`).join('') : `<div class="empty">Log a few places and follow some critics — recs show up here.</div>`}</div>`;
     } else if (tab === 'guides') {
-      const guides = buildGuides();
-      body = `<div class="pad">${guides.length ? guides.map(g => `
-        <div class="section-title" style="margin-top:8px">${esc(g.title)}<span class="muted small">${esc(g.sub)}</span></div>
+      const trend = trending(10);
+      const trendShelf = trend.length ? `
+        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
+          ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
+          <div class="rail-name ellipsis">${esc(x.b.name)}</div>
+          <div class="rail-meta muted">${x.n} log${x.n === 1 ? '' : 's'} this week</div>
+        </button>`).join('')}</div>` : '';
+      const guides = buildGuides(state.me);
+      body = `<div class="pad">${trendShelf}${guides.length ? guides.map(g => `
+        <div class="section-title" style="margin-top:8px"><span>${esc(g.title)} <span class="muted small">· ${esc(g.sub)}</span></span><button class="link" data-go="#/guide/${g.dim}/${encodeURIComponent(g.key)}">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${g.items.slice(0, 10).map(b => `<button class="rail-item" data-go="#/b/${b.id}">
           ${ph(b, { w: 300, cls: 'rail-photo', label: phLabel(b), go: false })}
           <div class="rail-name ellipsis">${esc(b.name)}</div>
           <div class="rail-meta muted">${esc(b.city || '')}</div>
-        </button>`).join('')}</div>`).join('') : `<div class="empty">Nothing to group yet.</div>`}</div>`;
+        </button>`).join('')}</div>`).join('') : (trendShelf ? '' : `<div class="empty">Nothing to group yet.</div>`)}</div>`;
     } else {
-      const want = state.want.filter(w => w.userId === state.me).length;
+      const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+      const beenCover = vs.length && BY_ID[vs[0].buildingId];
+      const wantItems = state.want.filter(w => w.userId === state.me).sort((a, b) => b.createdAt - a.createdAt);
+      const want = wantItems.length;
+      const wantCover = want && BY_ID[wantItems[0].buildingId];
       const lists = myLists();
       body = `<div class="stack-6 pad">
+        ${!vs.length && !want && !lists.length ? `<div class="empty">Lists are how you collect places — start with Want to Visit, or make your own to share with friends, like "Chicago rooftop bars."</div>` : ''}
+        <button class="row" data-go="#/list/been">
+          ${beenCover ? ph(beenCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('check')}</div>`}
+          <div class="grow"><b>Been</b><div class="sub">${vs.length} place${vs.length === 1 ? '' : 's'} logged · only you</div></div>
+          ${icon('chevron', 'sm')}
+        </button>
         <button class="row" data-go="#/list/want">
-          <div class="list-icon">${icon('bookmark')}</div>
+          ${wantCover ? ph(wantCover, { w: 160, style: 'width:52px;height:52px', go: false }) : `<div class="list-icon">${icon('bookmark')}</div>`}
           <div class="grow"><b>Want to Visit</b><div class="sub">${want} place${want === 1 ? '' : 's'} · only you</div></div>
           ${icon('chevron', 'sm')}
         </button>
@@ -681,6 +815,24 @@
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Want to Visit</div></div>
       <div class="stack-6 pad">${rows || '<div class="empty">Nothing saved yet.<br>Tap Save on any place.</div>'}</div>
+      <div class="spacer"></div>
+    </div>${nav('lists')}`;
+  }
+
+  function viewBeenList() {
+    const vs = visitsBy(state.me).filter(v => BY_ID[v.buildingId]).sort((a, b) => b.stars - a.stars || b.createdAt - a.createdAt);
+    const rows = vs.map((v, i) => {
+      const b = BY_ID[v.buildingId];
+      return `<button class="row" data-go="#/b/${b.id}">
+        <span class="rank">${i + 1}</span>
+        ${ph(b, { w: 120, style: 'width:44px;height:44px', go: false })}
+        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${esc(b.city)} · ${fmtDate(v.visitedOn)}</div></div>
+        ${starsHTML(v.stars)}
+      </button>`;
+    }).join('');
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Been</div></div>
+      <div class="stack-6 pad">${rows || '<div class="empty">You haven’t logged anything yet.<br>Tap the + to throw shade at your first place.</div>'}</div>
       <div class="spacer"></div>
     </div>${nav('lists')}`;
   }
@@ -906,6 +1058,13 @@
       ${own ? '' : `<div class="pad" style="margin-top:14px">${following
         ? `<button class="btn ghost" style="width:100%;height:48px;font-weight:600" data-act="follow" data-id="${uid}">${icon('check', 'sm')}Following</button>`
         : `<button class="btn-primary" style="height:48px" data-act="follow" data-id="${uid}">Follow</button>`}</div>`}
+      ${own ? '' : (() => {
+        const c = compatibility(state.me, uid);
+        return c ? `<div class="pad" style="margin-top:10px"><div class="banner" style="display:flex;align-items:center;gap:12px">
+          <b style="font-size:22px">${c.pct}%</b>
+          <div class="small muted">Taste match · ${c.n} shared place${c.n === 1 ? '' : 's'}</div>
+        </div></div>` : '';
+      })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
@@ -1729,9 +1888,11 @@
       case 'map': html = viewHome('map'); after = initMap; break;
       case 'find': html = viewFind(); break;
       case 'lists': html = viewLists(['recs', 'guides'].includes(seg[1]) ? seg[1] : 'mine'); break;
-      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
+      case 'list': html = seg[1] === 'want' ? viewWantList() : seg[1] === 'been' ? viewBeenList() : seg[2] === 'invite' ? viewInvite(seg[1]) : viewList(seg[1]); break;
       case 'save': html = viewSaveTo(seg[1]); break;
       case 'newlist': html = viewNewList(); break;
+      case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
+      case 'trending': html = viewTrending(); break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
