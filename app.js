@@ -337,6 +337,35 @@
       { id: 'trailblazer', label: 'Trailblazer', icon: icon('building'), desc: 'Add a place to the map yourself.', earned: added >= 1 },
     ];
   }
+  // Consecutive weeks (Mon–Sun) with at least one log, counting back from this week.
+  function streakWeeks(uid) {
+    const vs = visitsBy(uid);
+    if (!vs.length) return 0;
+    const weekStart = ts => { const d = new Date(ts); const day = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day); return d.getTime(); };
+    const weeks = new Set(vs.map(v => weekStart(v.createdAt)));
+    let streak = 0, cursor = weekStart(Date.now());
+    while (weeks.has(cursor)) { streak++; cursor -= 7 * DAY; }
+    return streak;
+  }
+  // Level/title: rough XP from logs + earned badges, mapped to a title band.
+  const LEVELS = [[0, 'Newcomer'], [50, 'Regular'], [120, 'Architecture Buff'], [250, 'Critic'], [450, 'Senior Critic'], [700, 'Master Critic'], [1000, 'Legend']];
+  function levelFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]).length;
+    const badges = badgesFor(uid).filter(x => x.earned).length;
+    const xp = vs * 10 + badges * 15;
+    let title = LEVELS[0][1], next = LEVELS[1];
+    for (let i = 0; i < LEVELS.length; i++) { if (xp >= LEVELS[i][0]) { title = LEVELS[i][1]; next = LEVELS[i + 1] || null; } }
+    return { xp, title, next, floor: LEVELS.find(l => l[1] === title)[0] };
+  }
+  // Monthly leaderboard among the people you follow, plus yourself.
+  function monthlyLeaderboard() {
+    const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+    const since = start.getTime();
+    const fids = followingIds(state.me); fids.add(state.me);
+    const counts = {};
+    state.visits.forEach(v => { if (fids.has(v.userId) && v.createdAt >= since) counts[v.userId] = (counts[v.userId] || 0) + 1; });
+    return Array.from(fids).map(uid => ({ u: user(uid), n: counts[uid] || 0 })).filter(x => x.u).sort((a, b) => b.n - a.n);
+  }
   function guideBuildings(dim, key) {
     if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
     if (dim === 'kind') return BUILDINGS.filter(b => kindOf(b) === key);
@@ -712,8 +741,17 @@
         ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
       </button>`;
     }).join('') : `<div class="empty">Nothing here yet.</div>`;
+    const completion = dim === 'city' ? (() => {
+      const seen = new Set(visitsBy(state.me).map(v => v.buildingId));
+      const done = list.filter(b => seen.has(b.id)).length;
+      return list.length ? `<div class="pad"><div class="banner" style="display:flex;flex-direction:column;gap:8px">
+        <div class="row-flex" style="justify-content:space-between"><b>You've seen ${done} of ${list.length}</b><span class="small muted">${Math.round(done / list.length * 100)}%</span></div>
+        <div class="bar"><div style="width:${Math.round(done / list.length * 100)}%"></div></div>
+      </div></div>` : '';
+    })() : '';
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">${esc(title)}</div></div>
+      ${completion}
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -1142,6 +1180,14 @@
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
         ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
       </div>
+      <div class="pad" style="padding-top:0;padding-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${(() => {
+          const lvl = levelFor(uid);
+          const pct = lvl.next ? Math.round((lvl.xp - lvl.floor) / (lvl.next[0] - lvl.floor) * 100) : 100;
+          return `<span class="chip">${esc(lvl.title)}</span><div class="bar" style="flex:1;min-width:60px"><div style="width:${pct}%"></div></div><span class="tiny muted">${lvl.next ? `${lvl.next[0] - lvl.xp} XP to ${esc(lvl.next[1])}` : 'Max level'}</span>`;
+        })()}
+        ${streakWeeks(uid) >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streakWeeks(uid)}-week streak</span>` : ''}
+      </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
         <div><b>${cities}</b><div class="tiny muted">Cities</div></div>
@@ -1173,6 +1219,11 @@
           <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
           ${icon('chevron', 'sm')}</button>` : ''}
+        ${own ? `<button class="row" data-go="#/leaderboard">
+          <div class="list-icon">${icon('users')}</div>
+          <div class="grow"><b>Friend Leaderboard</b><div class="sub">Who's logged the most this month</div></div>
+          ${icon('chevron', 'sm')}
+        </button>` : ''}
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
         <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
@@ -1225,6 +1276,23 @@
     else beenMap.fitBounds(list.map(g => [g.lat, g.lng]), { padding: [36, 36], maxZoom: 10 });
     draw();
     setTimeout(() => beenMap && beenMap.invalidateSize(), 0);
+  }
+
+  function viewLeaderboard() {
+    const rows = monthlyLeaderboard();
+    const monthName = new Date().toLocaleDateString('en-GB', { month: 'long' });
+    const body = rows.length ? rows.map((x, i) => `<div class="row" data-go="#/u/${x.u.id}">
+        <span class="rank">${i + 1}</span>
+        ${avatar(x.u)}
+        <div class="grow"><b>${x.u.id === state.me ? 'You' : esc(x.u.name)}</b><div class="sub">@${esc(x.u.handle)}</div></div>
+        <b>${x.n}</b>
+      </div>`).join('') : `<div class="empty">Follow some critics to see a leaderboard.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Leaderboard</div></div>
+      <div class="pad"><div class="caps">${monthName} · places logged</div></div>
+      <div class="stack-6 pad">${body}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function viewFollowList(uid, kind) {
@@ -2326,6 +2394,7 @@
       case 'newlist': html = viewNewList(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
+      case 'leaderboard': html = viewLeaderboard(); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
