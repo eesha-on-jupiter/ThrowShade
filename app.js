@@ -1691,7 +1691,8 @@
   }
   function initMap() {
     const items = mapBuildings();
-    if (!items.find(x => x.b.id === mapSel)) mapSel = items.length ? nearest(items.map(x => x.b))[0].b.id : null;
+    // No default selection — the card only appears once a specific pin is tapped, not "whatever's nearest".
+    if (!items.find(x => x.b.id === mapSel)) mapSel = null;
     renderMapCard();
     if (!window.L) {
       document.getElementById('map').innerHTML = '<div class="map-fallback">Map tiles need an internet connection. Pins and the building card still work from the list views.</div>';
