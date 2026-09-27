@@ -284,6 +284,7 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .nav .plus { width: 50px; height: 50px; border-radius: 16px; background: var(--ink); color: var(--paper); }
 .nav .plus.on { color: var(--paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--ink); }
 .nav .plus .i { width: 24px; height: 24px; }
+.nav-dot { position: absolute; top: 7px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); border: 1.5px solid var(--paper); }
 
 /* ---------- Bottom sheet (log flow) ---------- */
 .scrim { position: absolute; inset: 0; background: var(--board); }

@@ -590,7 +590,7 @@
   })();
   // Floating icon-only bar; names live in aria-label / title.
   function nav(active) {
-    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}" aria-label="${label}" title="${label}">${icon(ic)}</a>`;
+    const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}" aria-label="${label}" title="${label}">${icon(ic)}${key === 'you' && state.newAchievement ? '<span class="nav-dot"></span>' : ''}</a>`;
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home', 'home')}
       ${item('lists', '#/lists', 'Lists', 'bookmark')}
@@ -2475,7 +2475,9 @@
       case 'compare': html = viewCompare(seg[1]); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
-      case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
+      case 'me':
+        if (state.newAchievement) { state.newAchievement = false; save(); }
+        html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
       case 'u': html = viewProfile(seg[1]); after = () => initBeenMap(seg[1]); break;
       case 'followers': html = viewFollowList(seg[1], 'followers'); break;
       case 'following': html = viewFollowList(seg[1], 'following'); break;
@@ -2796,6 +2798,7 @@
       if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
       const challengeNow = challengeFor(state.me);
       if (!challengeWasDone && challengeNow.done) celebrations.push(`✅ Challenge complete: ${challengeNow.label}`);
+      if (celebrations.length) { state.newAchievement = true; save(); }
       setTimeout(() => { celebrate(); toast(msg); }, 30);
       celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
