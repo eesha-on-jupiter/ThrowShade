@@ -418,6 +418,7 @@
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
+    sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -550,7 +551,7 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapKindOpen = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false;
-  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, heatLayer = null, mapQTimer;
+  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, heatLayer = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -638,27 +639,33 @@
             </button>`;
           }).join('') : `<div class="empty">Nothing matches these filters.</div>`}
         </div></div>` : '';
+      const filtersActive = mapFilter !== 'all' || mapKind !== 'all' || mapMinRating > 0;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
-        <div class="pad" style="padding-bottom:8px"><div class="input-wrap">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div></div>
+        <div class="pad" style="padding-bottom:10px;display:flex;gap:8px;align-items:center">
+          <div class="input-wrap grow">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div>
+          <button class="btn-sq ${filtersActive ? 'on' : ''}" data-act="mapfilterstoggle" aria-label="Filters">${icon('sliders', 'sm')}</button>
+        </div>
         <div class="seg" style="margin:0 20px 10px">
           <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
           <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
           <button class="${mapMode === 'heat' ? 'on' : ''}" data-act="mapmode" data-k="heat">🔥 Heat</button>
         </div>
-        ${mapMode !== 'heat' ? `<div class="map-legend" id="legend">
-          <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles${icon('chevron', 'sm')}</button>
-          <div class="legend-items stack-6 closed" id="legend-items" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
-            <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
-            <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
-        </div>` : ''}
-        <div class="pills">
-          <button class="pill ${mapKindOpen ? 'on' : ''}" data-act="mapkindtoggle">${KIND_LABEL[mapKind]}${icon('chevron', 'sm')}</button>
-          <span class="pill-sep"></span>
-          ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
-        </div>
-        ${mapKindOpen ? `<div class="pills">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>` : ''}
-        <div class="pills">${rpill(0, 'Any rating')}${rpill(3, '3★+')}${rpill(4, '4★+')}${rpill(4.5, '4.5★+')}</div>
+        ${mapFiltersOpen ? `
+          <div class="pills">${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}</div>
+          <div class="pills">
+            <button class="pill ${mapKindOpen ? 'on' : ''}" data-act="mapkindtoggle">${KIND_LABEL[mapKind]}${icon('chevron', 'sm')}</button>
+            <span class="pill-sep"></span>
+            ${rpill(0, 'Any rating')}${rpill(3, '3★+')}${rpill(4, '4★+')}${rpill(4.5, '4.5★+')}
+          </div>
+          ${mapKindOpen ? `<div class="pills">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>` : ''}
+          ${mapMode !== 'heat' ? `<div class="map-legend" id="legend">
+            <button class="legend-toggle" data-act="legend">${icon('layers', 'sm')}Styles${icon('chevron', 'sm')}</button>
+            <div class="legend-items stack-6 closed" id="legend-items" style="gap:4px">${Object.entries(STYLES).map(([s, c]) => `<div><span class="dot" style="background:${c}"></span> ${s}</div>`).join('')}
+              <div class="muted" style="margin-top:2px">● been&nbsp;&nbsp;○ want</div>
+              <div class="muted">● building ■ bridge ◆ art ◉ spot</div></div>
+          </div>` : ''}
+        ` : ''}
         ${listBody}
         <div class="map-wrap" style="position:relative;flex:1;display:${mapMode === 'list' ? 'none' : 'block'}">
           <div id="map"></div>
@@ -1388,7 +1395,11 @@
     if (mapMode === 'heat' && window.L.heatLayer) {
       // Intensity follows rating, not just log count — hot spots are where the loved places are.
       const points = items.map(({ b }) => { const a = avgFor(b.id).avg; return [b.lat, b.lng, a ? a / 5 : 0.2]; });
-      heatLayer = window.L.heatLayer(points, { radius: 26, blur: 20, maxZoom: 15 }).addTo(map);
+      // Monochrome gradient (light grey → ink) instead of the plugin's default blue-to-red rainbow.
+      heatLayer = window.L.heatLayer(points, {
+        radius: 26, blur: 20, maxZoom: 15,
+        gradient: { 0.2: '#d6d5cf', 0.4: '#a8a7a0', 0.6: '#6e6e73', 0.8: '#3a3a3c', 1: '#1c1c1e' },
+      }).addTo(map);
     } else {
       clusterGroup = window.L.markerClusterGroup ? window.L.markerClusterGroup({ maxClusterRadius: 46, spiderfyOnMaxZoom: true, showCoverageOnHover: false }) : null;
       const target = clusterGroup || map;
@@ -2124,6 +2135,7 @@
     legend() { document.getElementById('legend-items').classList.toggle('closed'); },
     mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
     mapmode(d) { mapMode = d.k; render(); },
+    mapfilterstoggle() { mapFiltersOpen = !mapFiltersOpen; render(); },
     mapminrating(d) { mapMinRating = +d.k; mapSel = null; render(); },
     locate() {
       requestLocation(ok => {
