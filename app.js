@@ -1715,11 +1715,14 @@
     });
     if (clusterGroup) map.addLayer(clusterGroup);
     if (mapHeat && window.L.heatLayer) {
-      const fids = followingIds(state.me);
-      // Snapchat-style glow: everyone's logs light up a spot, friends' logs light it up brighter.
-      const points = items.flatMap(({ b }) => visitsFor(b.id).map(v => [b.lat, b.lng, fids.has(v.userId) || v.userId === state.me ? 1.6 : 1]));
+      // Snapchat-style glow, but the temperature is the place's rating, not just how many people logged it —
+      // a single 5-star pilgrimage spot should glow hotter than a crowd of 2-star logs elsewhere.
+      const points = items.map(({ b }) => {
+        const a = avgFor(b.id);
+        return a.avg ? [b.lat, b.lng, a.avg / 5] : null;
+      }).filter(Boolean);
       heatLayer = window.L.heatLayer(points, {
-        radius: 34, blur: 28, maxZoom: 17, minOpacity: .35,
+        radius: 34, blur: 28, maxZoom: 17, minOpacity: .25, max: 1,
         gradient: { 0.2: '#ffd60a', 0.45: '#ff9f1c', 0.7: '#ff4d6d', 1: '#c1121f' },
       }).addTo(map);
     }
