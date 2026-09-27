@@ -332,6 +332,8 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 .leaflet-tile-pane { filter: grayscale(1) contrast(.75) brightness(1.16); opacity: .85; }
 .leaflet-control-attribution { font-size: 9px !important; background: rgba(255,255,255,.75) !important; }
 .leaflet-control-zoom { display: none; }
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(28, 28, 30, .18); }
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background: var(--ink); color: var(--paper); font-weight: 600; }
 .map-legend { margin: 0 20px 10px; font-size: 11px; }
 .map-legend .legend-toggle { font-weight: 500; font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
 .map-legend .legend-toggle svg:last-child { margin-left: -2px; }
