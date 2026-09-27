@@ -410,7 +410,8 @@
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 4 13c0-5 4.5-9 12-10 1 7.5-3 12-5 12"/><path d="M15 9c-3 3-5 8-5 11"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 1 7 0M5.5 5.5a9 9 0 0 1 13 0M8.5 15.5a5 5 0 0 0 7 0M5.5 18.5a9 9 0 0 0 13 0"/>',
-    flame: '<path d="M12 2c2 3-2 4-2 7a3 3 0 0 0 6 0c1.5 2 2 4 2 6a6 6 0 1 1-12 0c0-4 3-5 3-9 0-1.5.5-3 3-4z"/>',
+    sliders: '<path d="M3 6h12M19 6h2"/><circle cx="17" cy="6" r="2"/><path d="M3 12h6M13 12h8"/><circle cx="9" cy="12" r="2"/><path d="M3 18h10M17 18h4"/><circle cx="13" cy="18" r="2"/>',
+    flame: '<path d="M12 22a6 6 0 0 0 6-6c0-3-2-4.5-3-7-0.5 1.5-1.5 2.5-2.5 2.5C13 9 13.5 6 11 2c0 4-4 6-5.5 9.5A6.8 6.8 0 0 0 5 14a7 7 0 0 0 7 8z"/>',
   };
   function icon(name, size) {
     return `<svg class="i ${size || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -544,7 +545,7 @@
   const root = document.getElementById('app');
   let beenMap = null, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapKindOpen = false, mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
-  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer;
+  let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
   let listSort = 'top';
   let bTab = 'critiques';
@@ -632,21 +633,21 @@
             </button>`;
           }).join('') : `<div class="empty">Nothing matches these filters.</div>`}
         </div></div>` : '';
-      const typeLabel = KIND_LABEL[mapKind] + (mapStyle !== 'all' ? ` · ${mapStyle}` : '') + (mapMinRating ? ` · ${mapMinRating}★+` : '');
+      const filtersActive = mapFilter !== 'all' || mapKind !== 'all' || mapStyle !== 'all' || mapMinRating > 0;
       return `<div class="screen with-nav fixed" style="display:flex;flex-direction:column">
         ${head}
-        <div class="pad" style="padding-bottom:8px"><div class="input-wrap">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div></div>
+        <div class="pad" style="padding-bottom:10px;display:flex;gap:8px;align-items:center">
+          <div class="input-wrap grow">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div>
+          <button class="btn-sq ${filtersActive ? 'on' : ''}" data-act="mapfilterstoggle" aria-label="Filters">${icon('sliders', 'sm')}</button>
+        </div>
         <div class="seg" style="margin:0 20px 10px">
           <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
           <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
         </div>
-        <div class="pills">
-          <button class="pill ${mapKindOpen || mapStyle !== 'all' || mapMinRating ? 'on' : ''}" data-act="mapkindtoggle">${mapStyle !== 'all' ? `<span class="dot" style="background:${STYLES[mapStyle]}"></span>` : ''}${typeLabel}${icon('chevron', 'sm')}</button>
-          <span class="pill-sep"></span>
-          ${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}
-        </div>
-        ${mapKindOpen ? `
+        ${mapFiltersOpen ? `
         <div class="map-filters">
+          <div class="pills" style="padding:0 0 10px">${pill('been', 'Been')}${pill('want', 'Want')}${pill('friends', 'Friends')}</div>
+          <div class="caps" style="margin-bottom:6px">Type</div>
           <div class="pills" style="padding:0 0 10px">${kpill('all', 'All')}${kpill('building', 'Buildings')}${kpill('bridge', 'Bridges')}${kpill('art', 'Art')}${kpill('spot', 'Spots')}</div>
           <div class="caps" style="margin-bottom:6px">Rating</div>
           <div class="pills" style="padding:0 0 10px">${rpill(0, 'Any')}${rpill(3, '3★+')}${rpill(4, '4★+')}${rpill(4.5, '4.5★+')}</div>
@@ -701,7 +702,7 @@
         <span class="small muted">${x.n} log${x.n === 1 ? '' : 's'}</span>
       </button>`).join('') : `<div class="empty">No logs in the last 7 days yet.</div>`;
     return `<div class="screen with-nav">
-      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">🔥 Trending</div></div>
+      <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1" style="display:flex;align-items:center;gap:8px">${icon('flame')}Trending</div></div>
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -837,7 +838,7 @@
     } else if (tab === 'guides') {
       const trend = trending(10);
       const trendShelf = trend.length ? `
-        <div class="section-title" style="margin-top:8px"><span>🔥 Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
+        <div class="section-title" style="margin-top:8px"><span style="display:inline-flex;align-items:center;gap:6px">${icon('flame', 'sm')} Trending <span class="muted small">· last 7 days</span></span><button class="link" data-go="#/trending">See all${icon('chevron', 'sm')}</button></div>
         <div class="rail flush">${trend.map(x => `<button class="rail-item" data-go="#/b/${x.b.id}">
           ${ph(x.b, { w: 300, cls: 'rail-photo', label: phLabel(x.b), go: false })}
           <div class="rail-name ellipsis">${esc(x.b.name)}</div>
@@ -1645,7 +1646,7 @@
     const btn = document.getElementById('pinbtn'), hint = document.getElementById('map-hint');
     if (btn) btn.classList.toggle('on', on);
     if (hint) hint.hidden = !on;
-    if (on && mapKindOpen) { mapKindOpen = false; render(); }
+    if (on && mapFiltersOpen) { mapFiltersOpen = false; render(); }
   }
   function placePin(latlng) {
     setPinMode(false);
@@ -2400,10 +2401,11 @@
     mapfilter(d) { mapFilter = mapFilter === d.k ? 'all' : d.k; mapSel = null; render(); },
     mapkind(d) { mapKind = d.k; mapKindOpen = false; mapSel = null; render(); },
     mapkindtoggle() { mapKindOpen = !mapKindOpen; render(); },
-    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapKindOpen = false; mapSel = null; render(); },
+    mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapFiltersOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
     mapmode(d) { mapMode = d.k; render(); },
-    mapminrating(d) { mapMinRating = +d.k; mapKindOpen = false; mapSel = null; render(); },
+    mapfilterstoggle() { mapFiltersOpen = !mapFiltersOpen; render(); },
+    mapminrating(d) { mapMinRating = +d.k; mapFiltersOpen = false; mapSel = null; render(); },
     locate() {
       requestLocation(ok => {
         if (!ok) toast('Location unavailable — using ' + loc.label);
