@@ -38,7 +38,7 @@
   // Illustrated profile pictures offered in Edit profile (app/avatars/avatar_01.png … _32.png).
   const PRESET_AVATARS = Array.from({ length: 32 }, (_, i) => 'avatars/avatar_' + String(i + 1).padStart(2, '0') + '.png');
   // Facts shown as small icons on a place and explained in About: certifications (hand-checked, app/data.js),
-  // landmark status / awards / Pritzker architects (Wikidata) and access (OpenStreetMap) — see tools/fetch_facts.py.
+  // landmark status / awards / Pritzker architects (Wikidata) — see tools/fetch_facts.py.
   const HERITAGE_NAMES = {
     'National Register of Historic Places listed place': 'National Register of Historic Places',
     'National Register of Historic Places contributing property': 'National Register (contributing property)',
@@ -54,38 +54,27 @@
       heritage: (f.heritage || []).map(h => HERITAGE_NAMES[h] || h),
       awards: f.awards || [],
       pritzker: f.pritzker || [],
-      access: f.access || {},
     };
   }
-  // One small icon per kind of fact; the title explains it, a tap scrolls to the details in About.
+  // One small icon per kind of recognition; the title explains it, a tap scrolls to the details in About.
   function factIcons(b, size) {
-    const f = factsFor(b), a = f.access, out = [];
+    const f = factsFor(b), out = [];
     const add = (name, title) => out.push(`<span class="fact-ic ${size || ''}" title="${esc(title)}" aria-label="${esc(title)}">${icon(name, 'sm')}</span>`);
     if (f.certs.length) add('leaf', f.certs.join(' · '));
     if (f.heritage.length) add('landmark', f.heritage.join(' · '));
     if (f.awards.length || f.pritzker.length) add('award', [...f.awards, ...f.pritzker.map(p => `Pritzker Prize architect: ${p.name}`)].join(' · '));
-    if (a.wheelchair === 'yes' || a.wheelchair === 'limited') add('accessible', a.wheelchair === 'yes' ? 'Step-free access' : 'Limited step-free access');
-    if (a.fee === 'no') add('ticket', 'Free entry');
-    else if (a.fee === 'yes') add('ticket', 'Entry fee');
-    if (a.opening_hours) add('clock', 'Hours: ' + a.opening_hours);
     return out.join('');
   }
   function factsHTML(b) {
-    const f = factsFor(b), a = f.access, rows = [];
+    const f = factsFor(b), rows = [];
     const row = (ic, label, value) => rows.push(`<div class="fact-row">${icon(ic, 'sm')}<div><div class="caps">${label}</div><div class="small">${value}</div></div></div>`);
     if (f.certs.length) row('leaf', 'Sustainability', esc(f.certs.join(' · ')));
     if (f.heritage.length) row('landmark', 'Landmark status', esc(f.heritage.join(' · ')));
     if (f.awards.length) row('award', 'Awards', esc(f.awards.join(' · ')));
     if (f.pritzker.length) row('award', 'Pritzker Prize architect', esc(f.pritzker.map(p => p.name + (p.year ? ` (${p.year})` : '')).join(' · ')));
-    const access = [
-      a.wheelchair === 'yes' ? 'Step-free access' : a.wheelchair === 'limited' ? 'Limited step-free access' : a.wheelchair === 'no' ? 'Not step-free' : '',
-      a.fee === 'no' ? 'Free entry' : a.fee === 'yes' ? 'Entry fee' : '',
-      a.opening_hours ? 'Hours: ' + a.opening_hours : '',
-    ].filter(Boolean);
-    if (access.length || a.website) row('accessible', 'Access', esc(access.join(' · ')) + (a.website ? `${access.length ? ' · ' : ''}<a href="${esc(a.website)}" target="_blank" rel="noopener">Website</a>` : ''));
     if (!rows.length) return '';
-    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', Object.keys(a).length && 'OpenStreetMap', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
-    return `<div id="facts" class="facts"><div class="bold">Recognition &amp; access</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
+    const src = [(f.heritage.length || f.awards.length || f.pritzker.length) && 'Wikidata', f.certs.length && 'certifying bodies (hand-checked)'].filter(Boolean);
+    return `<div id="facts" class="facts"><div class="bold">Recognition</div>${rows.join('')}<div class="tiny muted">Sources: ${src.join(' · ')}</div></div>`;
   }
   // Default "liked" aspects for seeded logs without explicit ones in data.js (TS_SEED_LIKES).
   const STYLE_LIKES = {
@@ -310,6 +299,61 @@
   }
   function rankByRating(list) {
     return list.slice().sort((a, b) => (avgFor(b.id).avg || 0) - (avgFor(a.id).avg || 0));
+  }
+  // Achievements: computed fresh from existing data, nothing new to store.
+  function badgesFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]);
+    const cities = new Set(vs.map(v => BY_ID[v.buildingId].city).filter(Boolean)).size;
+    const countries = new Set(vs.map(v => BY_ID[v.buildingId].country).filter(Boolean)).size;
+    const photoLogs = vs.filter(v => v.photos && v.photos.length).length;
+    const noteLogs = vs.filter(v => v.note && v.note.trim()).length;
+    const lowRatings = vs.filter(v => v.stars <= 2).length;
+    const avg = vs.length ? vs.reduce((s, v) => s + v.stars, 0) / vs.length : 0;
+    const added = state.places.filter(p => p.addedBy === uid).length;
+    const starIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path d="${STAR_PATH}" fill="currentColor"/></svg>`;
+    return [
+      { id: 'first', label: 'First Log', icon: icon('check'), desc: 'Log your first place.', earned: vs.length >= 1 },
+      { id: 'regular', label: 'Regular Critic', icon: icon('edit'), desc: 'Log 10 places.', earned: vs.length >= 10 },
+      { id: 'veteran', label: 'Veteran Critic', icon: icon('layers'), desc: 'Log 25 places.', earned: vs.length >= 25 },
+      { id: 'jetsetter', label: 'Jetsetter', icon: icon('navigate'), desc: 'Log places in 5 different cities.', earned: cities >= 5 },
+      { id: 'globe', label: 'World Traveler', icon: icon('pin'), desc: 'Log places in 3 different countries.', earned: countries >= 3 },
+      { id: 'photog', label: 'Photographer', icon: icon('camera'), desc: 'Add photos to 5 logs.', earned: photoLogs >= 5 },
+      { id: 'wordsmith', label: 'Wordsmith', icon: icon('feed'), desc: 'Write notes on 10 logs.', earned: noteLogs >= 10 },
+      { id: 'shade', label: 'Shade Thrower', icon: icon('x'), desc: 'Rate 5 places 2★ or below.', earned: lowRatings >= 5 },
+      { id: 'superfan', label: 'Superfan', icon: starIcon, desc: 'Average 4.5★+ across 5 logs.', earned: vs.length >= 5 && avg >= 4.5 },
+      { id: 'butterfly', label: 'Social Butterfly', icon: icon('users'), desc: 'Follow 10 people.', earned: followingIds(uid).size >= 10 },
+      { id: 'influencer', label: 'Influencer', icon: icon('user'), desc: 'Get 15 followers.', earned: followerCount(uid) >= 15 },
+      { id: 'trailblazer', label: 'Trailblazer', icon: icon('building'), desc: 'Add a place to the map yourself.', earned: added >= 1 },
+    ];
+  }
+  // Consecutive weeks (Mon–Sun) with at least one log, counting back from this week.
+  function streakWeeks(uid) {
+    const vs = visitsBy(uid);
+    if (!vs.length) return 0;
+    const weekStart = ts => { const d = new Date(ts); const day = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day); return d.getTime(); };
+    const weeks = new Set(vs.map(v => weekStart(v.createdAt)));
+    let streak = 0, cursor = weekStart(Date.now());
+    while (weeks.has(cursor)) { streak++; cursor -= 7 * DAY; }
+    return streak;
+  }
+  // Level/title: rough XP from logs + earned badges, mapped to a title band.
+  const LEVELS = [[0, 'Newcomer'], [50, 'Regular'], [120, 'Architecture Buff'], [250, 'Critic'], [450, 'Senior Critic'], [700, 'Master Critic'], [1000, 'Legend']];
+  function levelFor(uid) {
+    const vs = visitsBy(uid).filter(v => BY_ID[v.buildingId]).length;
+    const badges = badgesFor(uid).filter(x => x.earned).length;
+    const xp = vs * 10 + badges * 15;
+    let title = LEVELS[0][1], next = LEVELS[1];
+    for (let i = 0; i < LEVELS.length; i++) { if (xp >= LEVELS[i][0]) { title = LEVELS[i][1]; next = LEVELS[i + 1] || null; } }
+    return { xp, title, next, floor: LEVELS.find(l => l[1] === title)[0] };
+  }
+  // Monthly leaderboard among the people you follow, plus yourself.
+  function monthlyLeaderboard() {
+    const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+    const since = start.getTime();
+    const fids = followingIds(state.me); fids.add(state.me);
+    const counts = {};
+    state.visits.forEach(v => { if (fids.has(v.userId) && v.createdAt >= since) counts[v.userId] = (counts[v.userId] || 0) + 1; });
+    return Array.from(fids).map(uid => ({ u: user(uid), n: counts[uid] || 0 })).filter(x => x.u).sort((a, b) => b.n - a.n);
   }
   function guideBuildings(dim, key) {
     if (dim === 'style') return BUILDINGS.filter(b => b.style === key);
@@ -605,10 +649,10 @@
         ${avatar(u)}
         <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(where)}</div></div>
       </div>
+      ${shotsHTML(v.photos)}
       <div class="rating-line">${starsHTML(v.stars, 'md')}<span class="small muted">${STAR_WORDS[v.stars]}</span></div>
       ${v.note ? `<div class="quote">${esc(v.note)}</div>` : ''}
       ${likeChips(v.likes)}
-      ${shotsHTML(v.photos)}
       <div class="card-actions">${action}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
     </div>`;
   }
@@ -638,11 +682,8 @@
         ${head}
         <div class="pad" style="padding-bottom:10px;display:flex;gap:8px;align-items:center">
           <div class="input-wrap grow">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div>
+          <button class="btn-sq" data-act="mapmode" data-k="${mapMode === 'list' ? 'pins' : 'list'}" aria-label="${mapMode === 'list' ? 'Show map' : 'Show list'}" title="${mapMode === 'list' ? 'Map' : 'List'}">${icon(mapMode === 'list' ? 'map' : 'feed', 'sm')}</button>
           <button class="btn-sq ${filtersActive ? 'on' : ''}" data-act="mapfilterstoggle" aria-label="Filters">${icon('sliders', 'sm')}</button>
-        </div>
-        <div class="seg" style="margin:0 20px 10px">
-          <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
-          <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
         </div>
         ${mapFiltersOpen ? `
         <div class="map-filters">
@@ -671,7 +712,7 @@
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
       `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-act="findpeople">${icon('users', 'sm')}Find people</button>`;
-    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+    return `<div class="screen with-nav">${head}<div class="stack pad feed">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
   function viewGuide(dim, key) {
@@ -686,8 +727,17 @@
         ${a.avg ? scoreHTML(a.avg.toFixed(1)) : ''}
       </button>`;
     }).join('') : `<div class="empty">Nothing here yet.</div>`;
+    const completion = dim === 'city' ? (() => {
+      const seen = new Set(visitsBy(state.me).map(v => v.buildingId));
+      const done = list.filter(b => seen.has(b.id)).length;
+      return list.length ? `<div class="pad"><div class="banner" style="display:flex;flex-direction:column;gap:8px">
+        <div class="row-flex" style="justify-content:space-between"><b>You've seen ${done} of ${list.length}</b><span class="small muted">${Math.round(done / list.length * 100)}%</span></div>
+        <div class="bar"><div style="width:${Math.round(done / list.length * 100)}%"></div></div>
+      </div></div>` : '';
+    })() : '';
     return `<div class="screen with-nav">
       <div class="topbar"><button class="btn-sq" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1">${esc(title)}</div></div>
+      ${completion}
       <div class="stack-6 pad">${rows}</div>
       <div class="spacer"></div>
     </div>${nav('')}`;
@@ -1064,13 +1114,13 @@
       <div class="pad stack" style="padding-top:16px">
         <div><div class="h-building">${esc(b.name)}</div>
           <div class="muted" style="margin-top:2px">${esc([b.architect, b.year, b.typology, b.city].filter(Boolean).join(' · '))}</div>
-          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition and access">${factIcons(b)}</button>` : ''}</div>
+          ${factIcons(b) ? `<button class="fact-icons" data-act="tofacts" aria-label="See recognition">${factIcons(b)}</button>` : ''}</div>
         <div class="chips"><span class="chip"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>${kindOf(b) !== 'building' ? `<span class="chip dashed">${KINDS[kindOf(b)]}</span>` : ''}${b.country ? `<span class="chip dashed">${esc(b.country)}</span>` : ''}</div>
         ${liked.length ? `<div><div class="caps" style="margin-bottom:8px">What people like</div><div class="chips">${liked.map(([l, n]) => `<span class="chip">${esc(l)}<b class="count">${n}</b></span>`).join('')}</div></div>` : ''}
-        <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
-        <div class="row-flex">
-          <button class="btn block ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>
-          <a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener">${icon('navigate', 'sm')}Directions</a>
+        <div class="action-row">
+          <button class="btn-primary" data-go="#/log/${b.id}">${mv ? 'Edit your critique' : 'Throw Shade'}</button>
+          <button class="btn-ic ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}" aria-label="${isSaved(b.id) ? 'Saved' : 'Save'}" title="${isSaved(b.id) ? 'Saved' : 'Save'}">${icon(isSaved(b.id) ? 'bookmarkCheck' : 'bookmark')}</button>
+          <a class="btn-ic" href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener" aria-label="Directions" title="Directions">${icon('navigate')}</a>
         </div>
         <button class="btn dashed" style="width:100%;height:48px" data-go="#/radio/${b.id}">${icon('layers', 'sm')}Similar Places</button>
         <div class="about">
@@ -1098,13 +1148,23 @@
     const own = uid === state.me;
     const vs = visitsBy(uid);
     const cities = new Set(vs.map(v => BY_ID[v.buildingId] && (BY_ID[v.buildingId].city || BY_ID[v.buildingId].country))).size;
+    // Full critique cards: their photos (or the place's), place, date, stars, note and tags.
     const recent = vs.slice().sort((a, b) => b.createdAt - a.createdAt).map(v => {
       const b = BY_ID[v.buildingId]; if (!b) return '';
-      return `<button class="row" data-go="#/b/${b.id}">
-        ${ph(b, { style: 'width:38px;height:38px', go: false })}
-        <div class="grow"><div class="ellipsis">${esc(b.name)}</div><div class="sub ellipsis">${v.note ? esc(v.note) : esc(b.city)}</div></div>
-        ${starsHTML(v.stars)}
-      </button>`;
+      const where = [kindOf(b) !== 'building' && KINDS[kindOf(b)], b.city, fmtDate(v.visitedOn)].filter(Boolean).join(' · ');
+      return `<div class="crit-card">
+        ${v.photos && v.photos.length ? shotsHTML(v.photos) : ph(b, { w: 600, cls: 'crit-photo', label: phLabel(b) })}
+        <div class="crit-body">
+          <div class="row-flex" style="align-items:flex-start">
+            <div class="grow" style="min-width:0"><b class="crit-name" data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted ellipsis">${esc(where)}</div></div>
+            <span class="chip" style="flex-shrink:0"><span class="dot" style="background:${styleColor(b)}"></span>${esc(b.style)}</span>
+          </div>
+          <div class="rating-line">${starsHTML(v.stars, 'md')}<span class="small muted">${STAR_WORDS[v.stars]}</span></div>
+          ${v.note ? `<div class="quote">${esc(v.note)}</div>` : ''}
+          ${likeChips(v.likes)}
+          <div class="card-actions">${v.userId === state.me ? `<button class="link" data-go="#/log/${b.id}">${icon('edit', 'sm')}Edit</button>` : `<button class="link ${isSaved(b.id) ? 'on' : ''}" data-go="#/save/${b.id}">${isSaved(b.id) ? icon('bookmarkCheck', 'sm') + 'Saved' : icon('bookmark', 'sm') + 'Save'}</button>`}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
+        </div>
+      </div>`;
     }).join('');
 
     const following = isFollowing(state.me, uid);
@@ -1115,6 +1175,14 @@
         ${avatar(u, 'lg').replace('data-go', 'data-x')}
         <div class="grow" style="line-height:1.3"><b style="font-size:20px">${esc(u.name)}</b><div class="muted">@${esc(u.handle)}</div>${u.bio ? `<div class="small">${esc(u.bio)}</div>` : (own ? `<div class="small muted" data-go="#/editprofile">Add a bio</div>` : '')}</div>
         ${own ? `<div style="width:25%;flex-shrink:0;display:flex;justify-content:center"><button class="btn-sq thin" data-go="#/editprofile" aria-label="Edit profile">${icon('edit')}</button></div>` : ''}
+      </div>
+      <div class="pad" style="padding-top:0;padding-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${(() => {
+          const lvl = levelFor(uid);
+          const pct = lvl.next ? Math.round((lvl.xp - lvl.floor) / (lvl.next[0] - lvl.floor) * 100) : 100;
+          return `<span class="chip">${esc(lvl.title)}</span><div class="bar" style="flex:1;min-width:60px"><div style="width:${pct}%"></div></div><span class="tiny muted">${lvl.next ? `${lvl.next[0] - lvl.xp} XP to ${esc(lvl.next[1])}` : 'Max level'}</span>`;
+        })()}
+        ${streakWeeks(uid) >= 2 ? `<span class="chip">${icon('flame', 'sm')}${streakWeeks(uid)}-week streak</span>` : ''}
       </div>
       <div class="stat-table" style="margin:0 20px">
         <div><b>${vs.length}</b><div class="tiny muted">Logged</div></div>
@@ -1133,18 +1201,33 @@
         </div></div>` : '';
       })()}
       <div class="pad" style="padding-top:18px;display:flex;flex-direction:column;gap:18px">
+        ${(() => {
+          const badges = badgesFor(uid);
+          const earned = badges.filter(x => x.earned).length;
+          return `<div><div class="section-title">Badges<span class="small muted" style="font-weight:400">${earned} of ${badges.length}</span></div>
+            <div class="badge-grid">${badges.map(x => `<div class="badge-tile ${x.earned ? 'on' : 'locked'}" title="${esc(x.desc)}">
+              <div class="badge-icon">${x.icon}</div>
+              <div class="badge-label">${esc(x.label)}</div>
+            </div>`).join('')}</div>
+          </div>`;
+        })()}
         ${vs.length ? `<button class="wrap-cta" data-go="#/wrapped/${uid}">
           <span class="wrap-cta-dots">${Object.values(STYLES).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
           ${icon('chevron', 'sm')}</button>` : ''}
-        <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
+        ${own ? `<button class="row" data-go="#/leaderboard">
+          <div class="list-icon">${icon('users')}</div>
+          <div class="grow"><b>Friend Leaderboard</b><div class="sub">Who's logged the most this month</div></div>
+          ${icon('chevron', 'sm')}
+        </button>` : ''}
+        <div><div class="section-title tight">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
           <div class="been-wrap">
             <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div>
             ${vs.length ? `<button class="btn-sq map-heatbtn ${beenHeat ? 'on' : ''}" data-act="beenheat" aria-label="Toggle heatmap">${icon('flame')}</button>
             <button class="btn-sq map-locate" data-act="beenfit" aria-label="Show everywhere">${icon('locate')}</button>
             <div id="been-card"></div>` : ''}
           </div></div>
-        <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
+        <div><div class="section-title">Critiques</div><div class="crit-list">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
       <div class="spacer"></div>
@@ -1204,6 +1287,23 @@
     if (!beenMap || !places.length) return;
     if (places.length === 1) beenMap.setView([places[0].lat, places[0].lng], 14);
     else beenMap.fitBounds(places.map(b => [b.lat, b.lng]), { padding: [36, 36], maxZoom: 14 });
+  }
+
+  function viewLeaderboard() {
+    const rows = monthlyLeaderboard();
+    const monthName = new Date().toLocaleDateString('en-GB', { month: 'long' });
+    const body = rows.length ? rows.map((x, i) => `<div class="row" data-go="#/u/${x.u.id}">
+        <span class="rank">${i + 1}</span>
+        ${avatar(x.u)}
+        <div class="grow"><b>${x.u.id === state.me ? 'You' : esc(x.u.name)}</b><div class="sub">@${esc(x.u.handle)}</div></div>
+        <b>${x.n}</b>
+      </div>`).join('') : `<div class="empty">Follow some critics to see a leaderboard.</div>`;
+    return `<div class="screen with-nav">
+      <div class="topbar"><button class="btn-sq thin" data-act="back" aria-label="Back">${icon('back')}</button><div class="h1 grow">Leaderboard</div></div>
+      <div class="pad"><div class="caps">${monthName} · places logged</div></div>
+      <div class="stack-6 pad">${body}</div>
+      <div class="spacer"></div>
+    </div>${nav('')}`;
   }
 
   function viewFollowList(uid, kind) {
@@ -1381,9 +1481,9 @@
       html: `<div class="w-card">
           <div style="display:flex;align-items:center;gap:12px">${avatar(u, 'md').replace('data-go', 'data-x')}<div class="grow"><b>${esc(u.name)}</b><div class="small muted">throwShade Wrapped ${year}</div></div></div>
           <div class="w-card-grid">
-            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div class="ellipsis"><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
+            <div><div class="caps">Top buildings</div>${bs.slice(0, 3).map((b, i) => `<div><b>${i + 1}</b> ${esc(b.name)}</div>`).join('')}</div>
             <div><div class="caps">Top style</div><div><b>${esc(styles[0][0])}</b></div>
-              <div class="caps" style="margin-top:8px">Architect</div><div class="ellipsis"><b>${esc(architects[0][0])}</b></div></div>
+              <div class="caps" style="margin-top:8px">Architect</div><div><b>${esc(architects[0][0])}</b></div></div>
             <div><div class="caps">Logged</div><div class="w-card-num">${vs.length}</div></div>
             <div><div class="caps">Critic type</div><div><b>${persona}</b></div></div>
           </div>
@@ -1429,57 +1529,84 @@
   // Story-sized (1080×1920) PNG of the summary card, drawn on a canvas so it can be saved or posted.
   async function wrapImage(uid) {
     const w = wrapSummary(uid);
-    const W = 1080, H = 1920, F = '"IBM Plex Sans", system-ui, sans-serif';
+    const W = 1080, F = '"IBM Plex Sans", system-ui, sans-serif';
     try { await Promise.all([document.fonts.load('700 40px "IBM Plex Sans"'), document.fonts.load('400 40px "IBM Plex Sans"')]); } catch (e) {}
+    const img = w.u.photo ? await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; }) : null;
     const c = document.createElement('canvas');
-    c.width = W; c.height = H;
+    c.width = W; c.height = 1920;
     const x = c.getContext('2d');
-    const fit = (t, max) => {
-      if (x.measureText(t).width <= max) return t;
-      while (t.length > 1 && x.measureText(t + '…').width > max) t = t.slice(0, -1);
-      return t + '…';
+    // Word-wrap to a width; a single word wider than the line is split by characters.
+    const lines = (t, max) => {
+      const out = [];
+      let cur = '';
+      String(t).split(/\s+/).filter(Boolean).forEach(word => {
+        const test = cur ? cur + ' ' + word : word;
+        if (x.measureText(test).width <= max) { cur = test; return; }
+        if (cur) out.push(cur);
+        while (x.measureText(word).width > max) {
+          let i = word.length;
+          while (i > 1 && x.measureText(word.slice(0, i)).width > max) i--;
+          out.push(word.slice(0, i)); word = word.slice(i);
+        }
+        cur = word;
+      });
+      if (cur) out.push(cur);
+      return out;
     };
-    const round = (l, t, rw, rh, r) => { x.beginPath(); x.roundRect(l, t, rw, rh, r); };
+    const L = 110, CW = W - 2 * L, col2 = L + CW / 2 + 10;
 
-    x.fillStyle = w.color; x.fillRect(0, 0, W, H);
-    x.fillStyle = 'rgba(255,255,255,.85)'; x.textAlign = 'center';
-    x.font = `700 38px ${F}`; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+    // Two passes: measure to size the canvas and card, then draw.
+    const layout = card => {
+      const draw = !!card;
+      const text = (font, color, t, left, y, max, lh) => {
+        x.font = font; x.fillStyle = color;
+        const ls = lines(t, max);
+        if (draw) ls.forEach((l, i) => x.fillText(l, left, y + i * lh));
+        return y + (ls.length - 1) * lh;
+      };
+      const caps = (t, left, y) => { if (draw) { x.font = `700 28px ${F}`; x.fillStyle = '#a1a1a6'; x.fillText(t.toUpperCase(), left, y); } };
+      x.textAlign = 'center';
+      if (draw) {
+        x.fillStyle = w.color; x.fillRect(0, 0, W, c.height);
+        x.font = `700 38px ${F}`; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText(`THROWSHADE WRAPPED ${new Date().getFullYear()}`, W / 2, 190);
+        x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
+        if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
+        else { x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic'; }
+        x.restore();
+        x.fillStyle = '#fff'; x.beginPath(); x.roundRect(L, card.T, CW, card.bottom - card.T, 48); x.fill();
+      }
+      let y = text(`700 76px ${F}`, '#fff', w.u.name, W / 2, 650, 900, 86);
+      y = text(`400 40px ${F}`, 'rgba(255,255,255,.8)', '@' + w.u.handle, W / 2, y + 62, 900, 48);
 
-    // Avatar
-    x.save(); x.beginPath(); x.arc(W / 2, 400, 140, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.clip();
-    if (w.u.photo) {
-      const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = w.u.photo; });
-      if (img) x.drawImage(img, W / 2 - 140, 260, 280, 280);
-    } else {
-      x.fillStyle = INK; x.font = `700 90px ${F}`; x.textBaseline = 'middle'; x.fillText(initials(w.u.name), W / 2, 405); x.textBaseline = 'alphabetic';
-    }
-    x.restore();
-    x.fillStyle = '#fff'; x.font = `700 76px ${F}`; x.fillText(fit(w.u.name, 900), W / 2, 650);
-    x.fillStyle = 'rgba(255,255,255,.8)'; x.font = `400 40px ${F}`; x.fillText('@' + w.u.handle, W / 2, 712);
-
-    // Card
-    const L = 110, CW = W - 2 * L, T = 790, CH = 880;
-    x.fillStyle = '#fff'; round(L, T, CW, CH, 48); x.fill();
-    x.textAlign = 'left';
-    const caps = (t, l, top) => { x.fillStyle = '#a1a1a6'; x.font = `700 28px ${F}`; x.fillText(t.toUpperCase(), l, top); };
-    caps('Top buildings', L + 60, T + 90);
-    w.bs.slice(0, 5).forEach((b, i) => {
-      const y = T + 160 + i * 66;
-      x.fillStyle = INK; x.font = `700 44px ${F}`; x.fillText(String(i + 1), L + 60, y);
-      x.font = `400 42px ${F}`; x.fillText(fit(b.name, CW - 180), L + 120, y);
-    });
-    const gy = T + 540, col2 = L + CW / 2 + 10;
-    x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2);
-    caps('Logged', L + 60, gy);
-    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(String(w.vs.length), L + 60, gy + 100);
-    caps('Average', col2, gy);
-    x.fillStyle = INK; x.font = `700 96px ${F}`; x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
-    caps('Top style', L + 60, gy + 190);
-    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.style, CW / 2 - 90), L + 60, gy + 245);
-    caps('Critic type', col2, gy + 190);
-    x.fillStyle = INK; x.font = `700 42px ${F}`; x.fillText(fit(w.persona, CW / 2 - 70), col2, gy + 245);
-
-    x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = `700 56px ${F}`; x.fillText('throwShade', W / 2, 1800);
+      const T = y + 78;
+      x.textAlign = 'left';
+      caps('Top buildings', L + 60, T + 90);
+      y = T + 160;
+      w.bs.slice(0, 5).forEach((b, i) => {
+        if (draw) { x.font = `700 44px ${F}`; x.fillStyle = INK; x.fillText(String(i + 1), L + 60, y); }
+        y = text(`400 42px ${F}`, INK, b.name, L + 120, y, CW - 180, 52) + 66;
+      });
+      const gy = y + 34;
+      if (draw) { x.fillStyle = '#ececea'; x.fillRect(L + 60, gy - 60, CW - 120, 2); }
+      caps('Logged', L + 60, gy);
+      caps('Average', col2, gy);
+      if (draw) {
+        x.font = `700 96px ${F}`; x.fillStyle = INK;
+        x.fillText(String(w.vs.length), L + 60, gy + 100);
+        x.fillText(w.avg.toFixed(1) + '★', col2, gy + 100);
+      }
+      caps('Top style', L + 60, gy + 190);
+      caps('Critic type', col2, gy + 190);
+      const a = text(`700 42px ${F}`, INK, w.style, L + 60, gy + 245, CW / 2 - 90, 52);
+      const b = text(`700 42px ${F}`, INK, w.persona, col2, gy + 245, L + CW - 60 - col2, 52);
+      const bottom = Math.max(a, b) + 70;
+      const foot = Math.max(1800, bottom + 130);
+      if (draw) { x.textAlign = 'center'; x.font = `700 56px ${F}`; x.fillStyle = '#fff'; x.fillText('throwShade', W / 2, foot); }
+      return { T, bottom, height: foot + 120 };
+    };
+    const card = layout(null);
+    if (card.height > c.height) c.height = card.height;
+    layout(card);
     return new Promise(res => c.toBlob(res, 'image/png'));
   }
 
@@ -1503,7 +1630,9 @@
     if (wrapShare && wrapShare.uid !== uid) { URL.revokeObjectURL(wrapShare.url); wrapShare = null; }
     if (!wrapShare) {
       const blob = await wrapImage(uid);
-      wrapShare = { uid, blob, url: URL.createObjectURL(blob) };
+      // A data: URL downloads as a real .png everywhere; some mobile browsers mangle blob: downloads.
+      const dataURL = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+      wrapShare = { uid, blob, dataURL, url: URL.createObjectURL(blob) };
     }
     const pv = sheet.querySelector('.wrap-sheet-preview');
     if (pv) pv.innerHTML = `<img src="${wrapShare.url}" alt="Wrapped share image">`;
@@ -1514,11 +1643,21 @@
     host.querySelectorAll('.wrap-sheet, .wrap-sheet-bg').forEach(el => el.remove());
   }
   function wrapDownload() {
-    if (!wrapShare) return false;
+    if (!wrapShare) { toast('Still making the image — try again in a second'); return false; }
     const a = document.createElement('a');
-    a.href = wrapShare.url; a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
+    a.href = wrapShare.dataURL; a.type = 'image/png';
+    a.download = `throwshade-wrapped-${user(wrapShare.uid).handle}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     return true;
+  }
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // On a phone try the app first and fall back to the website if nothing took over the screen.
+  function openTarget(web, app) {
+    if (app && isMobile()) {
+      const t = setTimeout(() => { if (!document.hidden) location.href = web; }, 1500);
+      document.addEventListener('visibilitychange', () => clearTimeout(t), { once: true });
+      location.href = app;
+    } else window.open(web, '_blank', 'noopener');
   }
   function wrapFile() {
     return wrapShare ? new File([wrapShare.blob], `throwshade-wrapped-${user(wrapShare.uid).handle}.png`, { type: 'image/png' }) : null;
@@ -2309,6 +2448,7 @@
       case 'newlist': html = viewNewList(); break;
       case 'guide': html = viewGuide(seg[1], decodeURIComponent(seg.slice(2).join('/') || '')); break;
       case 'trending': html = viewTrending(); break;
+      case 'leaderboard': html = viewLeaderboard(); break;
       case 'radio': html = viewRadio(seg[1]); after = initRadioMap; break;
       case 'b': html = viewBuilding(seg[1]); break;
       case 'me': html = viewProfile(state.me); after = () => initBeenMap(state.me); break;
@@ -2477,20 +2617,20 @@
       const w = wrapSummary(wrapUid);
       const u = encodeURIComponent(w.link), t = encodeURIComponent(w.text);
       if (d.to === 'instagram') {
-        // No web intent for Instagram: hand the image to the phone's share sheet, else save it for posting.
-        const file = wrapFile();
-        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file] }).catch(() => {});
-        else if (wrapDownload()) toast('Image saved — post it to your Instagram story');
+        // Instagram has no web share link: save the image, then open Instagram to post it.
+        if (!wrapDownload()) return;
+        toast('Image saved — opening Instagram');
+        setTimeout(() => openTarget('https://www.instagram.com/', 'instagram://camera'), 700);
         return;
       }
       const urls = {
         facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
-        x: `https://twitter.com/intent/tweet?text=${t}&url=${u}`,
-        threads: `https://www.threads.net/intent/post?text=${t}%20${u}`,
+        x: `https://x.com/intent/post?text=${t}&url=${u}`,
+        threads: `https://www.threads.com/intent/post?text=${t}%20${u}`,
         whatsapp: `https://wa.me/?text=${t}%20${u}`,
-        line: `https://social-plugins.line.me/lineit/share?url=${u}&text=${t}`,
+        line: `https://line.me/R/share?text=${t}%20${u}`,
       };
-      if (urls[d.to]) window.open(urls[d.to], '_blank', 'noopener');
+      if (urls[d.to]) openTarget(urls[d.to]);
     },
     sharemore() {
       const w = wrapSummary(wrapUid), file = wrapFile();
@@ -2605,6 +2745,8 @@
       const b = BY_ID[draft.bid];
       const existing = myVisit(draft.bid);
       const snapshot = JSON.stringify(state);
+      const beforeBadges = new Set(badgesFor(state.me).filter(x => x.earned).map(x => x.id));
+      const beforeLevel = levelFor(state.me).title;
       const fields = { stars: draft.stars, note: draft.note.trim(), likes: draft.likes.slice(), visitedOn: draft.date, createdAt: Date.now() };
       if (existing) Object.assign(existing, fields, { photos: draft.photos.slice() });
       else state.visits.push(Object.assign({ id: 'v' + Date.now().toString(36), userId: state.me, buildingId: draft.bid, photos: draft.photos.slice() }, fields));
@@ -2626,7 +2768,13 @@
       bTab = 'critiques';
       trail.push('/b/' + bid);
       location.replace('#/b/' + bid);
+      // Newly unlocked badges/level, celebrated one at a time after the log toast clears.
+      const newBadges = badgesFor(state.me).filter(x => x.earned && !beforeBadges.has(x.id));
+      const afterLevel = levelFor(state.me).title;
+      const celebrations = newBadges.map(x => `🏆 Unlocked: ${x.label}`);
+      if (afterLevel !== beforeLevel) celebrations.push(`⬆️ Leveled up: ${afterLevel}`);
       setTimeout(() => { celebrate(); toast(msg); }, 30);
+      celebrations.forEach((m, i) => setTimeout(() => { celebrate(); Sound.success(); toast(m); }, 2500 * (i + 1)));
     },
   };
 
