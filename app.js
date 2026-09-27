@@ -502,32 +502,13 @@
       success() { tone(660, 0.09, 'sine', 0.05); tone(880, 0.13, 'sine', 0.05, 0.09); },
     };
   })();
-  // Pixel-art magnifying glass on a 12×12 grid, to match the pixel avatars.
-  const PIXEL_SEARCH = [
-    '...####.....',
-    '..#....#....',
-    '.#......#...',
-    '.#.#....#...',
-    '.#......#...',
-    '.#......#...',
-    '..#....#....',
-    '...####.#...',
-    '........##..',
-    '.........##.',
-    '..........##',
-    '...........#',
-  ];
-  function pixelSearch(size) {
-    const d = PIXEL_SEARCH.flatMap((row, y) => [...row].map((c, x) => (c === '#' ? `M${x} ${y}h1v1h-1z` : ''))).join('');
-    return `<svg class="i px ${size || ''}" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><path d="${d}" fill="currentColor"/></svg>`;
-  }
   // Floating icon-only bar; names live in aria-label / title.
   function nav(active) {
     const item = (key, href, label, ic) => `<a href="${href}" class="${active === key ? 'on' : ''}" aria-label="${label}" title="${label}">${icon(ic)}</a>`;
     return `<nav class="nav">
       ${item('home', '#/feed', 'Home', 'home')}
       ${item('lists', '#/lists', 'Lists', 'bookmark')}
-      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people" title="Search">${pixelSearch()}</a>
+      <a href="#/find" class="plus ${active === 'find' ? 'on' : ''}" aria-label="Search architecture and people" title="Search">${icon('search')}</a>
       ${item('map', '#/map', 'Map', 'map')}
       ${item('you', '#/me', 'You', 'user')}
     </nav>`;
@@ -733,7 +714,7 @@
         <button class="${findTab === 'arch' ? 'on' : ''}" data-act="findtab" data-k="arch">Architecture</button>
         <button class="${findTab === 'users' ? 'on' : ''}" data-act="findtab" data-k="users">Users</button>
       </div>
-      <div class="pad input-wrap">${pixelSearch()}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="${findTab === 'users' ? 'Search users by name or handle' : 'Search buildings, bridges, art, architects, cities'}" autocomplete="off" autocapitalize="none"></div>
+      <div class="pad input-wrap">${icon('search')}<input class="input" data-input="find" value="${esc(findQ)}" placeholder="${findTab === 'users' ? 'Search users by name or handle' : 'Search buildings, bridges, art, architects, cities'}" autocomplete="off" autocapitalize="none"></div>
       <div id="results" class="stack-6 pad">${findResults()}</div>
       <div class="spacer"></div>
     </div>${nav('find')}`;
@@ -1217,7 +1198,7 @@
   function viewLogPick() {
     return sheet('Throw Shade', 1, 2,
       `<button class="btn-sq thin" data-act="closelog" aria-label="Close">${icon('x')}</button>`,
-      `<div class="input-wrap">${pixelSearch()}<input class="input" data-input="logq" placeholder="Search buildings, bridges, art, spots" autocomplete="off"></div>
+      `<div class="input-wrap">${icon('search')}<input class="input" data-input="logq" placeholder="Search buildings, bridges, art, spots" autocomplete="off"></div>
        <button class="btn dashed" style="height:48px" data-act="pinfrommap">${icon('pin', 'sm')}Not listed? Drop a pin on the map</button>
        <div id="logresults" class="stack-6">${logResults('')}</div>`);
   }
