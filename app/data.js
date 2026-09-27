@@ -1,9 +1,11 @@
 // Seed data for the throwShade demo. Plain script (no modules) so the app also runs from file://.
 
 // Where "Nearby" sorts from when the browser can't (or won't) give a real location.
-// The Chicago Loop for now — change to the hackathon venue.
+// Midtown Manhattan for now, to match the NYC cluster of team ratings in
+// backend/seed.py (so the map heatmap shows a real cluster by default) —
+// change to the presentation venue.
 // force: true ignores the device's real location (handy when recording the demo somewhere else).
-window.TS_DEMO_LOCATION = { lat: 41.8819, lng: -87.6278, label: 'the Chicago Loop', force: true };
+window.TS_DEMO_LOCATION = { lat: 40.7580, lng: -73.9855, label: 'Midtown Manhattan', force: true };
 
 // Style colours come straight from the Screen Map legend; the last four extend it in the same muted register.
 window.TS_STYLES = {

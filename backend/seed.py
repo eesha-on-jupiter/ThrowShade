@@ -36,6 +36,19 @@ DEMO_VISITS = [
     ("u-yenhsing", "barcelona-pavilion", 5, "Floating planes, still radical.", ["Design", "Space"], 29),
     ("u-yenhsing", "glass-house", 4, "Beautiful, but where do you put your socks.", ["Design", "Context"], 53),
     ("u-yenhsing", "villa-savoye", 4, "The five points, textbook and gorgeous.", ["Design", "Structure"], 77),
+    # Dense NYC cluster (Manhattan is a few km across) so the map heatmap has
+    # enough nearby, varied-rating points to actually render a gradient
+    # instead of isolated dots — a global scatter alone doesn't overlap.
+    ("u-achyuth", "seagram", 5, "Bronze mullions, still the best-dressed thing on Park Ave.", ["Material", "Facade"], 10),
+    ("u-eesha", "whitney", 4, "Piano's stack of decks does right by the art.", ["Space", "Light"], 8),
+    ("u-eesha", "oculus", 2, "A stairmaster with a PR team.", ["Scale"], 34),
+    ("u-eesha", "moma", 5, "Taniguchi's atrium is the real exhibit.", ["Light", "Space"], 58),
+    ("u-shandon", "hearst", 5, "Diagrid over a 1928 base — cheeky and correct.", ["Structure", "Engineering"], 12),
+    ("u-shandon", "iac", 4, "Gehry's sails, but calm for once.", ["Facade", "Design"], 36),
+    ("u-shandon", "att-building", 3, "The Chippendale top is a one-liner that overstays.", ["Facade"], 60),
+    ("u-yenhsing", "lever-house", 4, "Glass box on stilts, still holds up.", ["Structure", "Design"], 14),
+    ("u-yenhsing", "un-secretariat", 2, "A slab is a slab is a slab.", ["Scale"], 38),
+    ("u-yenhsing", "guggenheim-ny", 5, "Wright's ramp is the exhibit.", ["Space", "Design"], 62),
 ]
 DEMO_WANT = [
     ("u-eesha", "sagrada-familia"), ("u-eesha", "church-of-light"),
