@@ -543,7 +543,7 @@
 
   // ---------- UI state ----------
   const root = document.getElementById('app');
-  let beenMap = null, inviteSel = new Set();
+  let beenMap = null, beenSel = null, beenUid = null, beenHeat = false, inviteSel = new Set();
   let mapKind = 'all', mapFilter = 'all', mapStyle = 'all', mapHeat = false, mapSel = null, map = null, mapMarkers = {}, mapView = null, pinMode = false, pinMap = null, mapFocus = false, heatLayer = null;
   let mapMode = 'pins', mapMinRating = 0, mapQ = '', clusterGroup = null, mapQTimer, mapFiltersOpen = false;
   let findQ = '', findTab = 'arch';
@@ -1053,7 +1053,7 @@
       `<a class="chip dashed" href="https://www.dezeen.com/?s=${q}" target="_blank" rel="noopener">Dezeen${icon('external', 'sm')}</a>`,
     ].filter(Boolean).join('');
     const adder = b.addedBy && user(b.addedBy);
-    return `<div class="screen">
+    return `<div class="screen with-nav">
       ${ph(b, { cls: 'hero', w: 1000, label: phLabel(b), go: false, inner: `
         <button class="btn-sq left" data-act="back" aria-label="Back">${icon('back')}</button>
         <div class="hero-ratings">
@@ -1089,7 +1089,7 @@
         ${tabBody}
       </div>
       <div class="spacer"></div>
-    </div>`;
+    </div>${nav('')}`;
   }
 
   function viewProfile(uid) {
@@ -1138,7 +1138,12 @@
           <span class="grow"><b>${own ? 'Your Wrapped' : esc(u.name.split(' ')[0]) + '’s Wrapped'}</b><span class="small">${vs.length} building${vs.length === 1 ? '' : 's'}, one recap</span></span>
           ${icon('chevron', 'sm')}</button>` : ''}
         <div><div class="section-title">Where ${own ? 'you’ve' : esc(u.name.split(' ')[0]) + ' has'} been<span class="small muted" style="font-weight:400">${cities} ${cities === 1 ? 'city' : 'cities'}</span></div>
-          <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div></div>
+          <div class="been-wrap">
+            <div id="beenmap" class="been-map">${vs.length ? '' : '<div class="map-fallback">Log a place to start your map.</div>'}</div>
+            ${vs.length ? `<button class="btn-sq map-heatbtn ${beenHeat ? 'on' : ''}" data-act="beenheat" aria-label="Toggle heatmap">${icon('flame')}</button>
+            <button class="btn-sq map-locate" data-act="beenfit" aria-label="Show everywhere">${icon('locate')}</button>
+            <div id="been-card"></div>` : ''}
+          </div></div>
         <div><div class="section-title">Critiques</div><div class="stack-6">${recent || '<div class="empty">Nothing logged yet.</div>'}</div></div>
         ${own ? `<div class="row-flex"><button class="btn block ghost" data-act="switch">${icon('switch', 'sm')}Switch account</button><button class="btn block ${resetArmed ? 'on' : ''}" data-act="reset">${icon('reset', 'sm')}${resetArmed ? 'Tap again to reset' : 'Reset demo'}</button></div>` : ''}
       </div>
@@ -1146,49 +1151,59 @@
     </div>${nav(own ? 'you' : '')}`;
   }
 
-  // One blob per city (or country when a place has no city), sized by how many places were logged there.
+  // Same look as the Map tab: style-coloured pins, clustered when zoomed out, a card for the tapped place.
+  function beenPinIcon(b) {
+    return window.L.divIcon({ className: '', html: `<div class="pin k-${kindOf(b)} ${beenSel === b.id ? 'sel' : ''} ${beenHeat ? 'dim' : ''}" style="--c:${styleColor(b)}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+  }
+  function renderBeenCard(uid) {
+    const el = document.getElementById('been-card');
+    if (!el) return;
+    const b = BY_ID[beenSel];
+    if (!b) { el.innerHTML = ''; return; }
+    const v = visitsBy(uid).find(x => x.buildingId === b.id);
+    const own = uid === state.me;
+    el.innerHTML = `<button class="map-card" data-go="#/b/${b.id}">
+      ${ph(b, { w: 160, style: 'width:56px;height:56px', go: false })}
+      <div class="grow" style="line-height:1.3;min-width:0"><b class="ellipsis" style="display:block">${esc(b.name)}</b><div class="small muted ellipsis">${esc(byLine(b))}</div>
+        <div class="small">${esc(b.city || b.country || '')}${v && v.visitedOn ? ` · ${fmtDate(v.visitedOn)}` : ''}</div></div>
+      ${v ? `<div style="font-size:18px;text-align:right">${scoreHTML(v.stars)}<div class="small muted">${own ? 'you' : esc(user(uid).name.split(' ')[0])}</div></div>` : ''}
+    </button>`;
+  }
   function initBeenMap(uid) {
     const el = document.getElementById('beenmap');
     if (!el || !window.L) return;
-    const groups = {};
-    visitsBy(uid).forEach(v => {
-      const b = BY_ID[v.buildingId]; if (!b) return;
-      const key = b.city || b.country || 'Elsewhere';
-      const g = groups[key] = groups[key] || { key, n: 0, lat: 0, lng: 0 };
-      g.n++; g.lat += b.lat; g.lng += b.lng;
-    });
-    const list = Object.values(groups).map(g => ({ key: g.key, n: g.n, lat: g.lat / g.n, lng: g.lng / g.n }));
-    if (!list.length) return;
+    const places = [...new Set(visitsBy(uid).map(v => v.buildingId))].map(id => BY_ID[id]).filter(Boolean);
+    if (!places.length) return;
+    if (beenUid !== uid) { beenUid = uid; beenSel = null; }
     beenMap = window.L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false, worldCopyJump: true });
-    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 }).addTo(beenMap);
-    const layer = window.L.layerGroup().addTo(beenMap);
-    const max = Math.max(...list.map(g => g.n));
-    // Merge cities whose blobs would overlap at the current zoom; they split apart again as you zoom in.
-    const draw = () => {
-      if (!beenMap) return;
-      layer.clearLayers();
-      const clusters = [];
-      list.slice().sort((x, y) => y.n - x.n).forEach(g => {
-        const pt = beenMap.latLngToLayerPoint([g.lat, g.lng]);
-        const hit = clusters.find(c => c.pt.distanceTo(pt) < 64);
-        if (hit) { hit.n += g.n; hit.more++; hit.lat += g.lat * g.n; hit.lng += g.lng * g.n; hit.w += g.n; }
-        else clusters.push({ pt, key: g.key, n: g.n, more: 0, lat: g.lat * g.n, lng: g.lng * g.n, w: g.n });
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(beenMap);
+    const markers = {};
+    const group = window.L.markerClusterGroup ? window.L.markerClusterGroup({ maxClusterRadius: 46, spiderfyOnMaxZoom: true, showCoverageOnHover: false }) : window.L.layerGroup();
+    places.forEach(b => {
+      const m = window.L.marker([b.lat, b.lng], { icon: beenPinIcon(b) });
+      m.on('click', () => {
+        const prev = beenSel; beenSel = b.id;
+        [prev, b.id].forEach(id => { if (markers[id]) markers[id].setIcon(beenPinIcon(BY_ID[id])); });
+        renderBeenCard(uid);
       });
-      const top = Math.max(max, ...clusters.map(c => c.n));
-      clusters.forEach(c => {
-        const size = Math.round(26 + 22 * Math.sqrt(c.n / top));
-        const label = c.more ? `${c.key} +${c.more}` : c.key;
-        window.L.marker([c.lat / c.w, c.lng / c.w], {
-          icon: window.L.divIcon({ className: '', html: `<div class="blob" style="width:${size}px;height:${size}px"><b>${c.n}</b><span class="blob-city">${esc(label)}</span></div>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }),
-          keyboard: false,
-        }).on('click', () => beenMap.setView([c.lat / c.w, c.lng / c.w], Math.min(beenMap.getZoom() + 3, 11))).addTo(layer);
-      });
-    };
-    beenMap.on('zoomend', draw);
-    if (list.length === 1) beenMap.setView([list[0].lat, list[0].lng], 10);
-    else beenMap.fitBounds(list.map(g => [g.lat, g.lng]), { padding: [36, 36], maxZoom: 10 });
-    draw();
+      markers[b.id] = m;
+      group.addLayer(m);
+    });
+    beenMap.addLayer(group);
+    if (beenHeat && window.L.heatLayer) {
+      window.L.heatLayer(visitsBy(uid).map(v => BY_ID[v.buildingId]).filter(Boolean).map(b => [b.lat, b.lng, 1]), {
+        radius: 34, blur: 28, maxZoom: 17, minOpacity: .35,
+        gradient: { 0.2: '#ffd60a', 0.45: '#ff9f1c', 0.7: '#ff4d6d', 1: '#c1121f' },
+      }).addTo(beenMap);
+    }
+    fitBeenMap(places);
+    renderBeenCard(uid);
     setTimeout(() => beenMap && beenMap.invalidateSize(), 0);
+  }
+  function fitBeenMap(places) {
+    if (!beenMap || !places.length) return;
+    if (places.length === 1) beenMap.setView([places[0].lat, places[0].lng], 14);
+    else beenMap.fitBounds(places.map(b => [b.lat, b.lng]), { padding: [36, 36], maxZoom: 14 });
   }
 
   function viewFollowList(uid, kind) {
@@ -2424,6 +2439,11 @@
     mapstyle(d) { mapStyle = mapStyle === d.k ? 'all' : d.k; mapFiltersOpen = false; mapSel = null; render(); },
     toggleheat() { mapHeat = !mapHeat; render(); },
     mapmode(d) { mapMode = d.k; render(); },
+    beenheat() { beenHeat = !beenHeat; render(); },
+    beenfit() {
+      const uid = beenUid || state.me;
+      fitBeenMap([...new Set(visitsBy(uid).map(v => v.buildingId))].map(id => BY_ID[id]).filter(Boolean));
+    },
     mapfilterstoggle() { mapFiltersOpen = !mapFiltersOpen; render(); },
     mapminrating(d) { mapMinRating = +d.k; mapFiltersOpen = false; mapSel = null; render(); },
     locate() {

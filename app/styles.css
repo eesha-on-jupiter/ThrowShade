@@ -496,18 +496,12 @@ textarea.input { height: 108px; padding: 12px 14px; resize: none; line-height: 1
 #newlist[hidden] { display: none; }
 
 /* ---------- Profile: where you've been ---------- */
-.been-map { position: relative; height: 280px; border-radius: 14px; overflow: hidden; background: var(--grid-bg); }
+.been-map { position: relative; isolation: isolate; height: 340px; border-radius: 14px; overflow: hidden; background: var(--grid-bg); }
 .been-map .leaflet-tile-pane { filter: grayscale(1) contrast(.75) brightness(1.16); opacity: .85; }
-.blob {
-  position: relative; border-radius: 50%; background: rgba(28, 28, 30, .86); color: var(--paper);
-  display: flex; align-items: center; justify-content: center; font-size: 12px;
-  box-shadow: 0 0 0 5px rgba(28, 28, 30, .12);
-}
-.blob-city {
-  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px;
-  font-size: 10.5px; font-weight: 600; color: var(--ink); white-space: nowrap;
-  background: rgba(255, 255, 255, .85); padding: 1px 6px; border-radius: 6px;
-}
+.been-wrap { position: relative; }
+.been-wrap .map-heatbtn { top: 12px; }
+.been-wrap .map-locate { top: 60px; }
+.been-wrap .map-card { left: 10px; right: 10px; bottom: 10px; }
 
 /* Credit under stand-in photos on seeded posts */
 .shot-credit { font-size: 10.5px; color: var(--text-3); margin-top: -4px; }
