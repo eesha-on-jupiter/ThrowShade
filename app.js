@@ -605,10 +605,10 @@
         ${avatar(u)}
         <div class="who"><b data-go="#/u/${u.id}">${mine ? 'You' : esc(u.handle)}</b> rated <b data-go="#/b/${b.id}">${esc(b.name)}</b><div class="small muted">${esc(where)}</div></div>
       </div>
+      ${shotsHTML(v.photos)}
       <div class="rating-line">${starsHTML(v.stars, 'md')}<span class="small muted">${STAR_WORDS[v.stars]}</span></div>
       ${v.note ? `<div class="quote">${esc(v.note)}</div>` : ''}
       ${likeChips(v.likes)}
-      ${shotsHTML(v.photos)}
       <div class="card-actions">${action}<button class="link" data-go="#/b/${b.id}">Details${icon('chevron', 'sm')}</button></div>
     </div>`;
   }
@@ -638,11 +638,8 @@
         ${head}
         <div class="pad" style="padding-bottom:10px;display:flex;gap:8px;align-items:center">
           <div class="input-wrap grow">${icon('search', 'sm')}<input class="input" data-input="mapq" value="${esc(mapQ)}" placeholder="Search this map"></div>
+          <button class="btn-sq" data-act="mapmode" data-k="${mapMode === 'list' ? 'pins' : 'list'}" aria-label="${mapMode === 'list' ? 'Show map' : 'Show list'}" title="${mapMode === 'list' ? 'Map' : 'List'}">${icon(mapMode === 'list' ? 'map' : 'feed', 'sm')}</button>
           <button class="btn-sq ${filtersActive ? 'on' : ''}" data-act="mapfilterstoggle" aria-label="Filters">${icon('sliders', 'sm')}</button>
-        </div>
-        <div class="seg" style="margin:0 20px 10px">
-          <button class="${mapMode === 'pins' ? 'on' : ''}" data-act="mapmode" data-k="pins">${icon('pin', 'sm')}Map</button>
-          <button class="${mapMode === 'list' ? 'on' : ''}" data-act="mapmode" data-k="list">${icon('feed', 'sm')}List</button>
         </div>
         ${mapFiltersOpen ? `
         <div class="map-filters">
@@ -671,7 +668,7 @@
     const items = state.visits.filter(v => fids.has(v.userId) || v.userId === state.me).sort((a, b) => b.createdAt - a.createdAt).slice(0, 60);
     const body = items.length ? items.map(feedCard).join('') :
       `<div class="empty">Your feed is empty.<br>Follow some critics to see what they’re rating.</div><button class="btn dashed" data-act="findpeople">${icon('users', 'sm')}Find people</button>`;
-    return `<div class="screen with-nav">${head}<div class="stack pad">${body}</div><div class="spacer"></div></div>${nav('home')}`;
+    return `<div class="screen with-nav">${head}<div class="stack pad feed">${body}</div><div class="spacer"></div></div>${nav('home')}`;
   }
 
   function viewGuide(dim, key) {
